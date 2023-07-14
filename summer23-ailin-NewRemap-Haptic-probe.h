@@ -1,5 +1,6 @@
 #include "targetver.h"
 
+#include <stdio.h>
 #include <cstdlib>
 #include <cmath>
 #include <math.h>
@@ -36,7 +37,6 @@
 #include "GLUtils.h"
 #include "VRCamera.h"
 #include "CoordinatesExtractor.h"
-#include "StimulusDrawer.h"
 #include "GLText.h"
 
 #include "ParametersLoader.h"
@@ -52,6 +52,9 @@
 #include "Marker.h"
 #include "BrownMotorFunctions.h"
 
+#include <random>
+#include <functional> // to help with thread safe randomization thread
+
 #include "SOIL.h"//Library for texture mapping
 
 /********* NAMESPACE DIRECTIVES ************************/
@@ -62,18 +65,19 @@ using namespace util;
 using namespace BrownMotorFunctions;
 using namespace BrownPhidgets;
 
+
 /*************** Variable Declarations ********************/
 static const bool gameMode = true;
 const float DEG2RAD = M_PI / 180;
 
 /********* VARIABLES OBJECTS  **********************/
 VRCamera cam;
-Optotrak2* optotrak;
+Optotrak2 optotrak;
 Screen screen;
 CoordinatesExtractor headEyeCoords;
 
 /***** CALIBRATION FILE *****/
-#include "LatestCalibration.h"
+#include "Calibration_017B.h"
 static const Vector3d center(0, 0, focalDistance);
 double mirrorAlignment = 0.0, screenAlignmentY = 0.0, screenAlignmentZ = 0.0;
 
@@ -88,18 +92,20 @@ int mirror1 = 6, mirror2 = 22;
 //////////////////////////////// usually no change is needed until this point //////////////////////
 
 
-/********** TRIAL SPECIFIC PARAMETERS ***************/
-ParametersLoader parameters;
+/*************************** TRIAL, INPUT AND OUTPUT ****************************/
+// experiment directory
+string experiment_directory = "C:/Users/labdomin/Documents/data/ailin/summer23-ailin-NewRemap-Haptic/";
 BalanceFactor<double> trial; //if using costant stimuli
 //TrialGenerator<double> trial;//if using staircase: 
 
-
-/*************************** INPUT AND OUTPUT ****************************/
-// experiment directory
-string experiment_directory = "C:/Users/visionlab/Documents/data/ailin/summer22-ailin-hapticRemap-SingleDepthCue-probe";
+ParametersLoader parameters_subj;
+ParametersLoader parameters;
 
 // paramters file directory and name
-string parametersFileName = experiment_directory + "/parameters_summer22-ailin-hapticRemap-SingleDepthCue-probe.txt";
+
+string parametersFileName_subj = experiment_directory + "trialPars/parameters_Subj.txt";
+
+string parametersFileName = experiment_directory + "trialPars/parameters_Haptic_probe.txt";
 
 // response file
 ofstream responseFile;

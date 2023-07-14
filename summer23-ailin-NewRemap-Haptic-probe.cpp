@@ -1,5 +1,5 @@
 // this script aims to use probe adjustment task to measure the gain/strength of either texture or disparity as a depth cue
-#include "stdafx.h"
+#include "summer23-ailin-NewRemap-Haptic-probe.h"
 
 void initStimulus(double stimulusDepth) {
 
@@ -817,9 +817,8 @@ void shutdown(){
 }
 void cleanup() 
 {
-// Stop the optotrak
-    optotrak->stopCollection();
-    delete optotrak;
+	// Stop the optotrak
+	optotrak.stopCollection();
 }
 void initProjectionScreen(double _focalDist, const Affine3d &_transformation, bool synchronous)
 {
@@ -837,34 +836,30 @@ void initProjectionScreen(double _focalDist, const Affine3d &_transformation, bo
 // Initialize Optotrak for use in the experiment
 void initOptotrak()
 {
-    optotrak=new Optotrak2(); //intiailize the Optotrak object
-    optotrak->setTranslation(calibration);
+	optotrak.setTranslation(calibration);
 
-	//define Optotrak-specific variables
-    int numMarkers=22;
-    float frameRate=85.0f;
-    float markerFreq=4600.0f;
-    float dutyCycle=0.4f;
-    float voltage = 7.0f;
+	if (optotrak.init(LastAlignedFile, OPTO_NUM_MARKERS, OPTO_FRAMERATE, OPTO_MARKER_FREQ, OPTO_DUTY_CYCLE, OPTO_VOLTAGE) != 0)
+	{
+		cerr << "Something during Optotrak initialization failed, press ENTER to continue. A error log has been generated, look \"opto.err\" in this folder" << endl;
+		cin.ignore(1E6, '\n');
+		exit(0);
+	}
 
-	// run the intiailization method for the Optotrak, checking to see if ever (if == 0) and catch the error if so
-    if ( optotrak->init("C:/cncsvisiondata/camerafiles/Aligned20111014",numMarkers, frameRate, markerFreq, dutyCycle,voltage) != 0)
-    {   cerr << "Something during Optotrak initialization failed, press ENTER to continue. A error log has been generated, look \"opto.err\" in this folder" << endl;
-        cin.ignore(1E6,'\n');
-        exit(0);
-    }
-
-    // Read 10 frames of coordinates and fill the markers vector
-    for (int i=0; i<10; i++)
-    {
-        updateTheMarkers();
-    }
+	for (int i = 0; i < 10; i++) {
+		updateTheMarkers();
+	}
 }
 // run a method to define a vector that holds marker positions 
+
 void updateTheMarkers()
 {
-	optotrak->updateMarkers();
-	markers = optotrak->getAllMarkers();
+	optotrak.updateMarkers();
+	markers = optotrak.getAllMarkers();
+
+	for (int i = 1; i <= OPTO_NUM_MARKERS; i++)
+	{
+		markers.at(i).p = rotationM * markers.at(i).p;
+	}
 
 }
 // Initialize motors for moving screen around
@@ -921,8 +916,6 @@ void initRendering()
 
 void initVariables()
 {
-	interoculardistance = atof(parameters.find("IOD").c_str());
-	display_distance = str2num<double>(parameters.find("dispDepth"));
 	
 	switch(sessionNum){
 		case 1:
@@ -983,41 +976,51 @@ void initBlock()
 void initStreams()
 {
 	// Initialize the parameter file starting from the file parameters.txt, if the file does not exist, it tells you
-	ifstream parametersFile;
+	ifstream parametersFile_subj;
 
-	//parametersFileName = experiment_directory + "/parameters_summer22-ailin-hapticRemap-SingleDepthCue-probe.txt";
+	parametersFile_subj.open(parametersFileName_subj.c_str());
+	parameters_subj.loadParameterFile(parametersFile_subj);
+	subjectName = parameters_subj.find("SubjectName");
+	//interoculardistance = str2num<double>(parameters_subj.find("IOD"));
+	display_distance = str2num<double>(parameters_subj.find("dispDepth"));
+	// Subject name
+
+
+	string session = parameters_subj.find("ProbeSession");
+	sessionNum = str2num<int>(session);
+
+	string dirName = experiment_directory + subjectName;
+	mkdir(dirName.c_str()); // windows syntax
+
+
+
+	// Principal streams files
+	if (util::fileExists(dirName + "/" + subjectName + "_s" + session + "_Probe.txt") && subjectName != "junk")
+	{
+		string error_on_file_io = string("file already exists");
+		cerr << error_on_file_io << endl;
+		MessageBox(NULL, (LPCSTR)"FILE ALREADY EXISTS\n Please check the parameters file.", NULL, NULL);
+		shutdown();
+	}
+
+
+
+	ifstream parametersFile;
 
 	parametersFile.open(parametersFileName.c_str());
 	parameters.loadParameterFile(parametersFile);
 
-
-	// Subject name
-	subjectName = parameters.find("SubjectName");
-	string session = parameters.find("Session");
-	sessionNum = str2num<int>(parameters.find("Session"));
-
-	if ((sessionNum < 1 ) || (sessionNum > 4 ))
-	{
-		string error_on_file_io = string("invalid session number");
-		cerr << error_on_file_io << endl;
-		MessageBox(NULL, (LPCSTR)"INVALID SESSION",NULL, NULL);
-		shutdown();
-	}
-
-	string responseFileName = experiment_directory +"/"+ subjectName + "_s" + session + ".txt";
-	// Principal streams files
-	if (util::fileExists(experiment_directory +"/"+ subjectName + "_s" + session + ".txt") && subjectName != "junk")
-	{
-		string error_on_file_io = string("file already exists");
-		cerr << error_on_file_io << endl;
-		MessageBox(NULL, (LPCSTR)"FILE ALREADY EXISTS\n Please check the parameters file.",NULL, NULL);
-		shutdown();
-	}
+	string responseFileName = dirName + "/" + subjectName + "_s" + session + "_Probe.txt";
 
 	responseFile.open(responseFileName.c_str());
 	responseFile << fixed << responseFile_headers << endl;
 	
 	//globalTimer.start();
+
+
+	responseFile.open(responseFileName.c_str());
+	responseFile << fixed << responseFile_headers << endl;
+
 }
 
 void drawGLScene()
