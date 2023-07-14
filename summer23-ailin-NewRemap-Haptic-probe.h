@@ -103,47 +103,51 @@ ParametersLoader parameters;
 
 // paramters file directory and name
 
-string parametersFileName_subj = experiment_directory + "trialPars/parameters_Subj.txt";
+string parametersFileName_subj = experiment_directory + "ParametersFiles/Haptic_Subj.txt";
 
-string parametersFileName = experiment_directory + "trialPars/parameters_Haptic_probe.txt";
+string parametersFileName = experiment_directory + "ParametersFiles/parameters_Haptic_probe.txt";
 
 // response file
 ofstream responseFile;
-string responseFile_headers = "subjName\tIOD\tblockN\ttrialN\tdisplayDistance\tvisualAngle\tshapeHeight\tshapeID\ttestingTexture\ttestingDisparity\tlefEyeView\trightEyeView\ttexnum\ttextNomralizer\ttestDepth\tprobeDepthInit\tprobeDepth\tdotNum\tdotVisAg\tdotColR\tjitterScale\tRT";
+string responseFile_headers = "subjName\tIOD\tblockN\ttrialN\tdisplayDistance\tvisualAngle\tshapeHeight\tshapeID\ttestingTexture\ttestingDisparity\tlefEyeView\trightEyeView\ttexnum\ttextNomralizer\ttestDepth\tprobeDepthInit\tprobeDepth\tdotNum\tdotVisAg\tSurf_color_R\tjitterScale\tRT\tadjustUpNum\tadjustDnNum";
 
 string subjectName;
 
 
 /**********	TRIALS **************/
 int sessionNum = 0;
+bool sessionOrder_texture_first = false;
 int totalBlkNum = 1;
 int blkNum = 1;
 int trialNum = 0;
 
-int trainNum_cap = 50;
+int trainNum_cap = 8;
 
 double percentComplete = 0;
 int repetition = 5;
-int totalTrNum = 6 * repetition;
+int totalTrNum = 4 * repetition * 2;
+
+int adjustUpNum = 0, adjustDownNum = 0;
 
 /********** STIMULUS SHAPE ***************/
 // stimulus shape
 double display_distance;
-double visual_angle = 7.5; // stim diangonal size
+double visualTarget_X = 21;
+double visual_angle = 8.0; // stim diangonal size
 double jitter_z = 0;
 double display_distance_jittered = display_distance + jitter_z;
 
 double stimulus_height = 70;//tan((DEG2RAD * visual_angle)/2) * 2 * (abs(display_distance));
 double stimulus_width = 70;
-double ratio_width_height = 1.06;
+double ratio_width_height = 1.2;
 double ratio_width_height_long = 1.4;
 
-double depth_test = 35;
+double depth_test = 32;
 double depth_inc = 2;
-double depth_training_min = 2; // set in the subject file
-int depth_training_range = 50; // set in the subject file
+double depth_training_min = 20; // set in the subject file
+int depth_training_range = 25; // set in the subject file
 
-enum shapeTypes {Ridge, Gaussian, Cosine, CosineRidge };
+enum shapeTypes { Ridge, Gaussian, Cosine, CosineRidge };
 shapeTypes current_shape = CosineRidge;
 int shapeID = 0;
 double gauss_sig_height_ratio = 0.16;
@@ -151,7 +155,7 @@ double gauss_sig_height_ratio = 0.16;
 int nr_points = 201;
 
 /********** BLOCKING PANELS ***************/
-enum panelStates{no_aperture, black_aperture, red_aperture};
+enum panelStates { no_aperture, black_aperture, red_aperture };
 panelStates panel_state = black_aperture;
 
 std::vector<Vector3d> vertContainer_Lcontour;
@@ -162,14 +166,18 @@ std::vector<Vector3d> dot_container;
 // dot specs
 int dot_number = 180; //num = 500, in the square which spans 7 degree in visual angle at 400mm display distance
 // for ot size
-double visAngle_dot = 0.20;//Bigger dot: 0.28; smaller dot: 0.14
+double visAngle_dot = 0.13;
 double ratio_dotSize_distance = tan(DEG2RAD * visAngle_dot / 2.0);
-float dot_color_R = 0.75; //Bigger dot: 0.64; smaller dot: 0.85
 int dot_sides = 16; // Bigger dot: 24; smaller dot: 8
 
 // for lattice dot array
-double dot_jitter_max_scale = 0.80;
-int dot_num_per_col = 9;
+double dot_jitter_max_scale = 1.30;
+int dot_num_per_col = 18;
+
+// for random dot surface
+float dispSurf_color_R = 0.8;
+int density_num = 16;
+int nr_pts_height_vertice = 76;
 /********** STIMULUS VERTICES ***************/
 // vectors storing vertices data
 std::vector<GLfloat> vertices_vec;
@@ -190,8 +198,11 @@ double normalizer_to_uv = 90;
 double u_offset = 0.05;
 double v_offset = 0.05;
 
-float amb_intensity = 0.5;
+float max_intensity = 0.8;
+float amb_intensity = 0.3;
+float lightDir_z = 0.6;
 /********** PROBE ***************/
+bool probe_drawSideView = true;
 double probe_depth = 10; // the depth indicated by the probe
 double probe_depth_init = 30; // starting value, should be randomized
 double probe_height = 100; // the height is the length when the probe is a straight line
@@ -202,7 +213,7 @@ double probe_y_array[201];
 double probe_x_array[201];
 
 /********** STATE VARIABLES ***************/
-enum Stages { stimulus_preview, prep_trial, trial_fixate, trial_view, trial_respond, break_time, exp_completed };
+enum Stages { stimulus_preview, prep_trial, trial_fixate, trial_view, trial_respond, trial_confirm, break_time, exp_completed };
 Stages current_stage = stimulus_preview; // if just want to look at the stimuli, use the constant present stage
 
 //state bool 
@@ -236,6 +247,7 @@ void initRendering();
 void initVariables();
 void initStreams();
 void initBlock();
+void setViewingVar();
 void handleResize(int w, int h);
 void initProjectionScreen(double _focalDist, const Affine3d& _transformation = Affine3d::Identity(), bool synchronous = true);
 void updateTheMarkers();
@@ -264,9 +276,9 @@ void drawBlockingPanels(double pandelSeparation);
 void drawFixation(double dispDist);
 
 int LoadGLTextures();
-void setLightingPar();
 void buildVertices_randomDot(double shapeDepth);
 void drawVertices_randomDot(double dispDist, double shapeDepth);
 void buildVertices_panels_wavy(double shapeDepth);
 void buildVertices_panels_jigsaw(double shapeDepth);
 void drawVertices_panels();
+float adjustAmbient(double textDepth, float maxInt, double rateAmbvsDiff_flat, double rateAmbvsDiff_deep, double Depth_flat, double Depth_deep);
