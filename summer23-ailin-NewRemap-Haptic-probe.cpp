@@ -992,7 +992,7 @@ void initStreams()
 	// Subject name
 
 
-	string session = parameters_subj.find("ProbeSession");
+	string session = parameters_subj.find("PROBE_Session");
 	sessionNum = str2num<int>(session);
 
 	string dirName = experiment_directory + subjectName;
@@ -1008,7 +1008,7 @@ void initStreams()
 		shutdown();
 	}
 
-	int odd_sess_text = str2num<int>(parameters_subj.find("Probe_Order_OddSess_Texture"));
+	int odd_sess_text = str2num<int>(parameters_subj.find("PROBE_Order_OddSess_Texture"));
 
 	if (odd_sess_text == 1) {
 		sessionOrder_texture_first = true;
