@@ -1,57 +1,140 @@
 // this script aims to use probe adjustment task to measure the gain/strength of either texture or disparity as a depth cue
 #include "summer23-ailin-NewRemap-Haptic-probe.h"
 
-void initStimulus(double stimulusDepth) {
+double getZ(double shapeHeight, double shapeDepth, double Y) {
 
-	if (testing_texture_vs_disparity) {
-		// testing texture, build vertices for curved surface
-		amb_intensity = adjustAmbient(stimulusDepth, max_intensity, 1.0, 0.6, 20, 40);
-		buildVertices_textureMap(stimulusDepth);
+	double Z;
+
+	Z = shapeDepth * cos(M_PI * Y / shapeHeight);
+
+	return (Z);
+}
+
+void updateProbe(double probeHeight, double probeDepth, vector<Vec2>& probeVerts) {
+
+	probeVerts.clear();
+
+	double step_size = probeHeight / (double)(nr_points_probe - 1);
+
+	for (int j = 0; j < nr_points_probe; j++) {
+
+		float y = -probeHeight / 2 + j * step_size;
+		float x = getZ(probeHeight, probeDepth, y);
+		probeVerts.push_back(Vec2{ x,y });
+
 	}
-	else {
-		/*
-		// testing disparity, build random dots
-		dot_container.clear();
-		//dot_container = buildRandomDots(stimulusDepth);
-		dot_container = buildRandomDots_Lattice(stimulusDepth, dot_num_per_col, dot_num_per_col, dot_jitter_max_scale);
-		*/
-
-		dot_container.clear();
-		dot_container = buildRandomDots_Lattice(stimulusDepth, dot_num_per_col, dot_num_per_col, dot_jitter_max_scale);
-
-		buildVertices_randomDot(stimulusDepth);
-		buildVertices_panels_wavy(stimulusDepth);
-		//buildVertices_panels_jigsaw(stimulusDepth);
-
-	}
-
-	display_distance_jittered = display_distance + jitter_z;
 
 }
 
+void drawProbe(double dispDist, double probeDepth, const vector<Vec2>& probeVerts) {
 
-void buildVertices_panels_wavy(double shapeDepth) {
+	glDisable(GL_TEXTURE_2D);
+	//glColor3f(1.0f, 0.0f, 0.0f);
 
-	vertContainer_Lcontour.clear();
-	vertContainer_Rcontour.clear();
+	glPushMatrix();
+	glLoadIdentity();
+	glTranslated(0, probe_location_offset, dispDist);
+
+	if (probe_drawSideView) {
+
+		glBegin(GL_LINES);
+		glLineWidth(1.f);
+		glColor3f(0.5f, 0.0f, 0.0f);
+		for (int i = 0; i < probeVerts.size() - 1; i++) {
+			glVertex3d(probeVerts[i].x, probeVerts[i].y, 0);
+			glVertex3d(probeVerts[i + 1].x, probeVerts[i + 1].y, 0);
+		}
+
+		glEnd();
+	}
+
+	glBegin(GL_LINES);
+	glLineWidth(2.f);
+	glColor3f(0.8f, 0.0f, 0.0f);
+	glVertex3d(0, -40, 0);
+	glVertex3d(0, 40, 0);
+	glVertex3d(probeDepth, -40, 0);
+	glVertex3d(probeDepth, 40, 0);
+	glEnd();
+
+
+	glPopMatrix();
+}
+
+void generateRandomDots(double shapeWidth, double shapeHeight, double shapeDepth, int dotNumPerRow, int dotNumPerCol, double dotJitterMax_Scale, vector<Vector3d>& dotContainer) {
+
+	dotContainer.clear();
+	int dot_counter_top = 0, dot_counter_bottom = 0;
+	int N_count = 2;
+
+	double step_size_x = shapeWidth / (double)(dotNumPerRow - 1);
+	double step_size_y = shapeHeight / (double)(dotNumPerCol - 1);
+
+	double dot_jitter_x_max = step_size_x * dotJitterMax_Scale;
+	double dot_jitter_y_max = step_size_y * dotJitterMax_Scale;
+
+	double x, y, z;
+
+	for (int i_y = 0; i_y < dotNumPerCol; i_y++) {
+		for (int i_x = 0; i_x < dotNumPerRow; i_x++) {
+			x = i_x * step_size_x - shapeWidth / 2 +
+				(rand() % 17) / 16.0 * dot_jitter_x_max - dot_jitter_x_max / 2;
+
+			y = i_y * step_size_y - shapeHeight / 2 +
+				(rand() % 17) / 16.0 * dot_jitter_y_max - dot_jitter_y_max / 2;
+
+			if (y < -shapeHeight / 2) {
+				y = -shapeHeight / 2;
+				z = 0;
+				dot_counter_bottom++;
+
+				if (dot_counter_bottom % N_count == 0) {
+					dotContainer.push_back(Vector3d(x, y, z));
+				}
+
+			}
+			else if (y > shapeHeight / 2) {
+				y = shapeHeight / 2;
+				z = 0;
+				dot_counter_top++;
+
+				if (dot_counter_top % N_count == 0) {
+					dotContainer.push_back(Vector3d(x, y, z));
+				}
+			}
+			else {
+
+				z = getZ(shapeHeight, shapeDepth, y);
+				dotContainer.push_back(Vector3d(x, y, z));
+			}
+
+		}
+	}
+}
+
+void buildContour_wavy(double ContourWidth, double shapeHeight, double shapeDepth, ContourData& new_contours_vert) {
+
+	new_contours_vert = {};
 
 	int nr_seg = 1, nr_wave_perSeg = 6, nr_unit_perWave = 8, nr_step_unit = 10; // number of segments need to be an even number
 	int del_unit_prev = 0, del_unit_next = 0, nr_unit_current = nr_unit_perWave;
 
-	double step_y = stimulus_height / (nr_seg * nr_wave_perSeg * nr_unit_perWave * nr_step_unit);
+	double step_y = shapeHeight / (nr_seg * nr_wave_perSeg * nr_unit_perWave * nr_step_unit);
 
 	int rand_portions = 20; //how many portions we want - will creat (1 + rand_portions) different values
 	double rand_min = .5, rand_max = 2;
 	double seg_x_off_L, seg_x_off_R;
 
-	double x_L = -stimulus_width / 2, x_R = stimulus_width / 2; // 
-	double y = -stimulus_height / 2, y0 = -stimulus_height / 2;
-	double tempy_height = ((double)(1.0 / 6.0)) * (stimulus_height / nr_seg);
+	double x_L = -ContourWidth / 2, x_R = ContourWidth / 2; // 
+	double y = -shapeHeight / 2, y0 = -shapeHeight / 2;
+	double tempy_height = ((double)(1.0 / 6.0)) * (shapeHeight / nr_seg);
 	double dummy_sign = -1;
 
 	double z = 0;
-	vertContainer_Lcontour.push_back(Vector3d(x_L, y, z));
-	vertContainer_Rcontour.push_back(Vector3d(x_R, y, z));
+
+	new_contours_vert.vert_Lcontour.push_back(Vector3d(x_L, y, z));
+	new_contours_vert.vert_Rcontour.push_back(Vector3d(x_R, y, z));
+
 
 	// Left
 	for (int i_wave = 0; i_wave < nr_wave_perSeg; i_wave++) {
@@ -73,16 +156,14 @@ void buildVertices_panels_wavy(double shapeDepth) {
 			seg_x_off_L = rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions));
 			//seg_x_off_R = rand_min + (rand_max - rand_min) * ( rand() % (rand_portions + 1) )/((double)(rand_portions));
 
-
 			for (int i_step = 0; i_step < nr_unit_current * nr_step_unit; i_step++) {
 
 				y = y + step_y;
-				x_L = -stimulus_width / 2 - dummy_sign * seg_x_off_L * sin(0.5 * M_PI * (y - y0) / tempy_height);
-				//x_R = stimulus_width / 2 + dummy_sign * seg_x_off_R * sin(0.5 * M_PI * (y - y0) / tempy_height);	
-				z = shapeDepth * cos(M_PI * y / stimulus_height);
+				x_L = -ContourWidth / 2 - dummy_sign * seg_x_off_L * sin(0.5 * M_PI * (y - y0) / tempy_height);
+				//x_R = ContourWidth / 2 + dummy_sign * seg_x_off_R * sin(0.5 * M_PI * (y - y0) / tempy_height);
+				z = getZ(shapeHeight, shapeDepth, y);
 
-				vertContainer_Lcontour.push_back(Vector3d(x_L, y, z));
-				//vertContainer_Rcontour.push_back(Vector3d(x_R, y, z));
+				new_contours_vert.vert_Lcontour.push_back(Vector3d(x_L, y, z));
 
 			}
 
@@ -92,12 +173,11 @@ void buildVertices_panels_wavy(double shapeDepth) {
 			for (int i_step = 0; i_step < nr_unit_current * nr_step_unit; i_step++) {
 
 				y = y + step_y;
-				x_L = -stimulus_width / 2 - dummy_sign * seg_x_off_L * cos(0.5 * M_PI * (y - y0) / tempy_height);
-				//x_R = stimulus_width / 2 + dummy_sign * seg_x_off_R * cos(0.5 * M_PI * (y - y0) / tempy_height);	
-				z = shapeDepth * cos(M_PI * y / stimulus_height);
+				x_L = -ContourWidth / 2 - dummy_sign * seg_x_off_L * cos(0.5 * M_PI * (y - y0) / tempy_height);
+				//x_R = ContourWidth / 2 + dummy_sign * seg_x_off_R * cos(0.5 * M_PI * (y - y0) / tempy_height);	
+				z = getZ(shapeHeight, shapeDepth, y);
 
-				vertContainer_Lcontour.push_back(Vector3d(x_L, y, z));
-				//vertContainer_Rcontour.push_back(Vector3d(x_R, y, z));
+				new_contours_vert.vert_Lcontour.push_back(Vector3d(x_L, y, z));
 
 			}
 
@@ -109,9 +189,8 @@ void buildVertices_panels_wavy(double shapeDepth) {
 	}
 
 	// Right
-
 	del_unit_prev = 0;
-	y = -stimulus_height / 2, y0 = -stimulus_height / 2;
+	y = -shapeHeight / 2, y0 = -shapeHeight / 2;
 	dummy_sign = -1;
 	for (int i_wave = 0; i_wave < nr_wave_perSeg; i_wave++) {
 
@@ -134,12 +213,11 @@ void buildVertices_panels_wavy(double shapeDepth) {
 			for (int i_step = 0; i_step < nr_unit_current * nr_step_unit; i_step++) {
 
 				y = y + step_y;
-				//x_L = -stimulus_width / 2 - dummy_sign * seg_x_off_L * sin(0.5 * M_PI * (y - y0) / tempy_height);
-				x_R = stimulus_width / 2 + dummy_sign * seg_x_off_R * sin(0.5 * M_PI * (y - y0) / tempy_height);
-				z = shapeDepth * cos(M_PI * y / stimulus_height);
+				//x_L = -ContourWidth / 2 - dummy_sign * seg_x_off_L * sin(0.5 * M_PI * (y - y0) / tempy_height);
+				x_R = ContourWidth / 2 + dummy_sign * seg_x_off_R * sin(0.5 * M_PI * (y - y0) / tempy_height);
+				z = getZ(shapeHeight, shapeDepth, y);
 
-				//vertContainer_Lcontour.push_back(Vector3d(x_L, y, z));
-				vertContainer_Rcontour.push_back(Vector3d(x_R, y, z));
+				new_contours_vert.vert_Rcontour.push_back(Vector3d(x_R, y, z));
 
 			}
 
@@ -149,13 +227,11 @@ void buildVertices_panels_wavy(double shapeDepth) {
 			for (int i_step = 0; i_step < nr_unit_current * nr_step_unit; i_step++) {
 
 				y = y + step_y;
-				//x_L = -stimulus_width / 2 - dummy_sign * seg_x_off_L * cos(0.5 * M_PI * (y - y0) / tempy_height);
-				x_R = stimulus_width / 2 + dummy_sign * seg_x_off_R * cos(0.5 * M_PI * (y - y0) / tempy_height);
-				z = shapeDepth * cos(M_PI * y / stimulus_height);
+				//x_L = -ContourWidth / 2 - dummy_sign * seg_x_off_L * cos(0.5 * M_PI * (y - y0) / tempy_height);
+				x_R = ContourWidth / 2 + dummy_sign * seg_x_off_R * cos(0.5 * M_PI * (y - y0) / tempy_height);
+				z = getZ(shapeHeight, shapeDepth, y);
 
-				//vertContainer_Lcontour.push_back(Vector3d(x_L, y, z));
-				vertContainer_Rcontour.push_back(Vector3d(x_R, y, z));
-
+				new_contours_vert.vert_Rcontour.push_back(Vector3d(x_R, y, z));
 			}
 
 		}
@@ -167,574 +243,69 @@ void buildVertices_panels_wavy(double shapeDepth) {
 
 }
 
-void buildVertices_panels_jigsaw(double shapeDepth) {
+void buildRandomDotSurface(double shapeWidth, double shapeHeight, double shapeDepth, double contourPanelSeparation, VerticesData& vertices_data, vector<Vector3d>& dotContainer, ContourData& contours_vert) {
 
-	vertContainer_Rcontour.clear();
-	vertContainer_Lcontour.clear();
-	//double width_separation = dispDist/(dispDist - shapeDepth) * stimulus_height * ratio_width_height;
+	vertices_data = {};
 
-	int nr_seg = 4, nr_sub = 10, nr_sub_firsthalf = 0; // number of segments need to be an even number
-	double step_y = stimulus_height / (nr_seg * nr_sub);
+	int nr_pts_height = nr_points_height_bgSurface;
+	int nr_pts_width = nr_pts_height * (shapeWidth / shapeHeight);
 
-	int rand_portions = 20; //how many steps we want - we will have (1 + rand_portions) different values
-	double rand_min = .5, rand_max = 4;
-	double seg_x_off_head = -(rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions)));
-	double seg_x_off_end, seg_x_off_half, step_x_off;
-
-	double x = stimulus_width / 2 + seg_x_off_head; // 
-	double y = -stimulus_height / 2;
-	double z = 0;
-	vertContainer_Rcontour.push_back(Vector3d(x, y, z));
-
-
-	for (int i_seg = 0; i_seg < nr_seg; i_seg++) {
-
-		seg_x_off_half = rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions));
-		seg_x_off_end = -(rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions)));
-
-		nr_sub_firsthalf = nr_sub / 2 + (rand() % 5 - 2);
-
-		step_x_off = (seg_x_off_half - seg_x_off_head) / nr_sub_firsthalf;
-
-		for (int i_sub = 0; i_sub < nr_sub_firsthalf; i_sub++) {
-
-			x = x + step_x_off;
-			y = y + step_y;
-			z = shapeDepth * cos(M_PI * y / stimulus_height);
-
-			vertContainer_Rcontour.push_back(Vector3d(x, y, z));
-			//vertContainer_Lcontour.push_back(Vector3d(-stimulus_width / 2, y, z));
-
-		}
-
-		step_x_off = (seg_x_off_end - seg_x_off_half) / (nr_sub - nr_sub_firsthalf);
-
-		for (int i_sub = 0; i_sub < (nr_sub - nr_sub_firsthalf); i_sub++) {
-
-			x = x + step_x_off;
-			y = y + step_y;
-			z = shapeDepth * cos(M_PI * y / stimulus_height);
-
-			vertContainer_Rcontour.push_back(Vector3d(x, y, z));
-			//vertContainer_Lcontour.push_back(Vector3d(-stimulus_width / 2, y, z));
-
-		}
-
-		seg_x_off_head = seg_x_off_end;
-
-	}
-
-
-	seg_x_off_head = (rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions)));
-
-	x = -stimulus_width / 2 + seg_x_off_head; // 
-	y = -stimulus_height / 2;
-	z = 0;
-
-	vertContainer_Lcontour.push_back(Vector3d(x, y, z));
-
-	for (int i_seg = 0; i_seg < nr_seg; i_seg++) {
-
-		seg_x_off_end = rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions));
-		seg_x_off_half = -(rand_min + (rand_max - rand_min) * (rand() % (rand_portions + 1)) / ((double)(rand_portions)));
-
-		nr_sub_firsthalf = nr_sub / 2 + (rand() % 5 - 2);
-
-		step_x_off = (seg_x_off_half - seg_x_off_head) / nr_sub_firsthalf;
-
-		for (int i_sub = 0; i_sub < nr_sub_firsthalf; i_sub++) {
-
-			x = x + step_x_off;
-			y = y + step_y;
-			z = shapeDepth * cos(M_PI * y / stimulus_height);
-
-			vertContainer_Lcontour.push_back(Vector3d(x, y, z));
-
-		}
-
-		step_x_off = (seg_x_off_end - seg_x_off_half) / (nr_sub - nr_sub_firsthalf);
-
-		for (int i_sub = 0; i_sub < (nr_sub - nr_sub_firsthalf); i_sub++) {
-
-			x = x + step_x_off;
-			y = y + step_y;
-			z = shapeDepth * cos(M_PI * y / stimulus_height);
-
-			vertContainer_Lcontour.push_back(Vector3d(x, y, z));
-
-		}
-
-		seg_x_off_head = seg_x_off_end;
-
-	}
-}
-
-
-
-void drawVertices_panels() {
-
-	int n = int(vertContainer_Rcontour.size());;
-	float panel_width = 40;
-	float panel_height_extra = 20;
-
-
-	if (n > 0) {
-
-		glPushMatrix();
-		glTranslated(0, 0, 2);
-
-		glBegin(GL_QUAD_STRIP);
-
-		glVertex3f(vertContainer_Lcontour.at(0)[0], vertContainer_Lcontour.at(0)[1] - panel_height_extra, vertContainer_Lcontour.at(0)[2]); //0
-		glVertex3f(vertContainer_Lcontour.at(0)[0] - panel_width, vertContainer_Lcontour.at(0)[1] - panel_height_extra, vertContainer_Lcontour.at(0)[2]); //1
-
-		for (int i = 0; i < n; i++)
-		{
-			glVertex3f(vertContainer_Lcontour.at(i)[0], vertContainer_Lcontour.at(i)[1], vertContainer_Lcontour.at(i)[2]); //0
-			glVertex3f(vertContainer_Lcontour.at(i)[0] - panel_width, vertContainer_Lcontour.at(i)[1], vertContainer_Lcontour.at(i)[2]); //1
-
-		}
-
-		glVertex3f(vertContainer_Lcontour.at(n - 1)[0], vertContainer_Lcontour.at(n - 1)[1] + panel_height_extra, vertContainer_Lcontour.at(n - 1)[2]); //0
-		glVertex3f(vertContainer_Lcontour.at(n - 1)[0] - panel_width, vertContainer_Lcontour.at(n - 1)[1] + panel_height_extra, vertContainer_Lcontour.at(n - 1)[2]); //1
-
-		glEnd();
-
-		// Right panel
-		glBegin(GL_QUAD_STRIP);
-
-		glVertex3f(vertContainer_Rcontour.at(0)[0] + panel_width, vertContainer_Rcontour.at(0)[1] - panel_height_extra, vertContainer_Rcontour.at(0)[2]); //0
-		glVertex3f(vertContainer_Rcontour.at(0)[0], vertContainer_Rcontour.at(0)[1] - panel_height_extra, vertContainer_Rcontour.at(0)[2]); //1
-
-		for (int i = 0; i < n; i++)
-		{
-			glVertex3f(vertContainer_Rcontour.at(i)[0] + panel_width, vertContainer_Rcontour.at(i)[1], vertContainer_Rcontour.at(i)[2]); //0
-			glVertex3f(vertContainer_Rcontour.at(i)[0], vertContainer_Rcontour.at(i)[1], vertContainer_Rcontour.at(i)[2]); //1
-
-		}
-
-		glVertex3f(vertContainer_Rcontour.at(n - 1)[0] + panel_width, vertContainer_Rcontour.at(n - 1)[1] + panel_height_extra, vertContainer_Rcontour.at(n - 1)[2]); //0
-		glVertex3f(vertContainer_Rcontour.at(n - 1)[0], vertContainer_Rcontour.at(n - 1)[1] + panel_height_extra, vertContainer_Rcontour.at(n - 1)[2]); //1
-
-		glEnd();
-
-		glPopMatrix();
-	}
-
-}
-
-void buildVertices_randomDot(double shapeDepth) {
-
-	int nr_pts_height = nr_pts_height_vertice;
-	int nr_pts_width = (nr_pts_height - 1) * ratio_width_height_long + 1;
-
-	double long_width = stimulus_height * ratio_width_height_long;
-
-	double step_size_width = long_width / (double)(nr_pts_width - 1);
-	double step_size_height = stimulus_height / (double)(nr_pts_height - 1);
+	double step_size_width = shapeWidth / (double)(nr_pts_width - 1);
+	double step_size_height = shapeHeight / (double)(nr_pts_height - 1);
 
 	GLuint i_ind = 0;
 
 	double x, y, z;
 	//double normal_x, normal_y, normal_z;
+	for (int jj = 0; jj < nr_pts_height; jj++) {
 
-	vertices_vec_new.clear();
-	colors_vec_new.clear();
-	indices_draw_triangle_vec_new.clear();
+		y = -shapeHeight / 2 + jj * step_size_height;
+		z = getZ(shapeHeight, shapeDepth, y);
 
 
-	for (int j = 0; j < nr_pts_height; j++) {  // 
+		for (int ii = 0; ii < nr_pts_width; ii++) {
+			x = -shapeWidth / 2 + ii * step_size_width;
 
-		y = -stimulus_height / 2 + j * step_size_height;
-		z = shapeDepth * cos(M_PI * y / stimulus_height);
+			vertices_data.vertices_vec.push_back(x);
+			vertices_data.vertices_vec.push_back(y);
+			vertices_data.vertices_vec.push_back(z);
 
-		for (int i = 0; i < nr_pts_width; i++) { //
+			vertices_data.colors_vec.push_back(bgSurface_color);
+			vertices_data.colors_vec.push_back(0);
+			vertices_data.colors_vec.push_back(0);
 
-			x = -long_width / 2 + i * step_size_width;
+			if (ii < nr_pts_width - 1 && jj < nr_pts_height - 1) {
 
-			// using vector
-			vertices_vec_new.push_back(x);
-			vertices_vec_new.push_back(y);
-			vertices_vec_new.push_back(z);
+				// using vector
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + 1);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + nr_pts_width);
 
-			/*
-			if(rand() % density_num == 1){
-				colors_vec_new.push_back(0);
-				colors_vec_new.push_back(0);
-				colors_vec_new.push_back(0);
-			}else{
-				colors_vec_new.push_back(dispSurf_color_R);
-				colors_vec_new.push_back(0);
-				colors_vec_new.push_back(0);
-			}
-			*/
-			colors_vec_new.push_back(dispSurf_color_R);
-			colors_vec_new.push_back(0);
-			colors_vec_new.push_back(0);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + nr_pts_width);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + 1);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + nr_pts_width + 1);
 
-			// construct the triangle indices to be drawn
-			if (i < nr_pts_width - 1 && j < nr_pts_height - 1) {
-
-				indices_draw_triangle_vec_new.push_back(i_ind);
-				indices_draw_triangle_vec_new.push_back(i_ind + 1);
-				indices_draw_triangle_vec_new.push_back(i_ind + nr_pts_width);
-
-				indices_draw_triangle_vec_new.push_back(i_ind + nr_pts_width);
-				indices_draw_triangle_vec_new.push_back(i_ind + 1);
-				indices_draw_triangle_vec_new.push_back(i_ind + nr_pts_width + 1);
-				//ind = ind + 6;
 			}
 
 			i_ind++;
-
-		}
-
-	}
-
-}
-
-void drawVertices_randomDot(double dispDist, double shapeDepth) {
-
-	glPushMatrix();
-
-	glLoadIdentity();
-	glTranslated(visualTarget_X, 0, dispDist - shapeDepth);
-
-	// enable matrices for use in drawing below
-	//glEnable(GL_POLYGON_SMOOTH);
-	//glEnable(GL_BLEND);
-	//glEnable(GL_NORMALIZE); //so we don't need to normalize our normal for surfaces
-
-	// activate and specify pointer to vertex array
-	glEnableClientState(GL_VERTEX_ARRAY);
-	//glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	//glEnableClientState(GL_NORMAL_ARRAY);
-	glEnableClientState(GL_COLOR_ARRAY);
-
-	glVertexPointer(3, GL_FLOAT, 0, &vertices_vec_new[0]);
-	//glTexCoordPointer(2, GL_FLOAT, 0, &texcoors_vec[0]);
-	//glNormalPointer(GL_FLOAT, 0, &normals_vec[0]); //
-	glColorPointer(3, GL_FLOAT, 0, &colors_vec_new[0]);
-	glDrawElements(GL_TRIANGLES, indices_draw_triangle_vec_new.size(), GL_UNSIGNED_INT, &indices_draw_triangle_vec_new[0]);
-
-	// deactivate vertex arrays after drawing
-	glDisableClientState(GL_VERTEX_ARRAY);
-	//glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	//glDisableClientState(GL_NORMAL_ARRAY);
-	glDisableClientState(GL_COLOR_ARRAY);
-
-
-	switch (panel_state) {
-	case no_aperture:
-		break;
-
-	case black_aperture:
-		glColor3f(0.0f, 0.0f, 0.0f);
-		drawVertices_panels();
-		//such that the separation has the same visual angle of the stimulusheight
-		break;
-
-	case red_aperture:
-		glColor3f(0.5f, 0.0f, 0.0f);
-		drawVertices_panels();
-		break;
-
-
-	}
-
-	glPopMatrix();
-}
-
-void buildVertices_textureMap(double shapeDepth) {
-
-	double step_size_width = stimulus_width / (double)(nr_points - 1);
-	double step_size_height = stimulus_height / (double)(nr_points - 1);
-
-	GLuint i_ind = 0;
-
-	double x, y, z, y_prev, z_prev, u, v;
-	y_prev = -stimulus_height / 2;
-	z_prev = 0;
-	double total_distance_y = 0; //tracks the distance along y/z axis, approximate the "diameter" of the ellipse
-	double normal_x, normal_y, normal_z;
-
-	vertices_vec.clear();
-	colors_vec.clear();
-	texcoors_vec.clear();
-	normals_vec.clear();
-	indices_draw_triangle_vec.clear();
-
-
-	for (int j = 0; j < nr_points; j++) {  // 
-
-		y = -stimulus_height / 2 + j * step_size_height;
-		z = shapeDepth * cos(M_PI * y / stimulus_height);
-
-
-		total_distance_y = total_distance_y + sqrt(pow(y - y_prev, 2) + pow(z - z_prev, 2));
-		v = total_distance_y / normalizer_to_uv + v_offset; //v coordinate
-
-		normal_x = 0;
-		normal_y = shapeDepth * sin(M_PI * y / stimulus_height) * M_PI / stimulus_height;
-		normal_z = 1;
-
-
-		for (int i = 0; i < nr_points; i++) { //
-
-			x = -stimulus_width / 2 + i * step_size_width;
-			u = (x + stimulus_width / 2) / normalizer_to_uv + u_offset;; //u coordinate. 
-
-		/*
-
-		step 1: build the meshgrid using vertices,
-
-
-			(8)---(9)---(10)--(11)
-			 |     |     |     |
-			 |     |     |     |
-			 |     |     |     |
-			 |     |     |     |
-			(4)---(5)---(6)---(7)
-			 |     |     |     |
-			 |     |     |     |
-			 |     |     |     |
-			 |     |     |     |
-			(0)---(1)---(2)---(3)
-
-
-			going over each vertex: store the (x,y,z) to vertices array or vector, (u,v) to texcoors array or vector, (1,0,0) to colors array or vector,
-			if light source or shading is involved, normals are needed
-
-*/
-
-// using vector
-			vertices_vec.push_back(x);
-			vertices_vec.push_back(y);
-			vertices_vec.push_back(z);
-
-			colors_vec.push_back(1);
-			colors_vec.push_back(0);
-			colors_vec.push_back(0);
-
-			texcoors_vec.push_back(u);
-			texcoors_vec.push_back(v);
-
-			normals_vec.push_back(normal_x);
-			normals_vec.push_back(normal_y);
-			normals_vec.push_back(normal_z);
-			/*
-				step 2: create an array/vector that store how the triangles should be drawn
-
-				The array/vector is one dimensional, but is groupped by unit of 3, meaning every three elements form a triangle
-
-				for example, if indices_draw_triangle is like [0 1 4 4 1 5 1 2 5 5 2 6 ...],
-				then it draws triangles with indices {0 1 4}, {4 1 5}, {1 2 5}, {5 2 6}...
-
-				(8)---(9)---(10)--(11)
-				 |\    |\    |\    |
-				 | \   | \   | \   |
-				 |  \  |  \  |  \  |
-				 |   \ |   \ |   \ |
-				(4)---(5)---(6)---(7)
-				 |\    |\    |\    |
-				 | \   | \   | \   |
-				 |  \  |  \  |  \  |
-				 |   \ |   \ |   \ |
-				(0)---(1)---(2)---(3)
-
-
-
-			 triangle 1: 0 1 4;   triangle 2: 4 1 5
-			 triangle 3: 1 2 5;   triangle 2: 5 2 6 ...
-		*/
-
-		// construct the triangle indices to be drawn
-			if (i < nr_points - 1 && j < nr_points - 1) {
-
-				indices_draw_triangle_vec.push_back(i_ind);
-				indices_draw_triangle_vec.push_back(i_ind + 1);
-				indices_draw_triangle_vec.push_back(i_ind + nr_points);
-
-				indices_draw_triangle_vec.push_back(i_ind + nr_points);
-				indices_draw_triangle_vec.push_back(i_ind + 1);
-				indices_draw_triangle_vec.push_back(i_ind + nr_points + 1);
-				//ind = ind + 6;
-			}
-
-			i_ind++;
-
-		}
-
-		y_prev = y; z_prev = z;
-	}
-
-}
-
-float adjustAmbient(double textDepth, float maxInt, double rateAmbvsDiff_flat, double rateAmbvsDiff_deep, double Depth_flat, double Depth_deep) {
-
-	double rateAmbvsDiff_new = rateAmbvsDiff_flat + (rateAmbvsDiff_deep - rateAmbvsDiff_flat) * (textDepth - Depth_flat) / (Depth_deep - Depth_flat);
-	float newAmbient = maxInt * (rateAmbvsDiff_new / (rateAmbvsDiff_new + 1));
-
-	return newAmbient;
-}
-
-void drawVertices_textureMap(int texNum, double dispDist, double shapeDepth) {
-
-	glShadeModel(GL_SMOOTH); // enable Smooth Shading
-	glEnable(GL_LIGHTING); // enable lighting
-	glEnable(GL_LIGHT1);
-	glEnable(GL_NORMALIZE); //so we don't need to normalize our normal for surfaces
-
-	glPushMatrix();
-	glLoadIdentity();
-	// Light source parameters
-	GLfloat LightAmbient[] = { amb_intensity, 0.0f, 0.0f, 1.0f }; // non-directional & overall light (r,g,b,alpha): dark part
-	GLfloat LightDiffuse[] = { max_intensity - amb_intensity, 0.0f, 0.0f, 1.0f }; // light created by the light source (directional light; r,g,b,alpha): bright part
-	GLfloat LightPosition[] = { 0.0f, 1.f, lightDir_z, 0.0f }; // Light Position (x, y, z, 1.0f); if w==0, directional; if w==1, positional lights. Attenuation can be applied only to the positional light 
-
-	//glPushMatrix();
-	//glLoadIdentity();
-
-	//setting the light
-	glLightfv(GL_LIGHT1, GL_AMBIENT, LightAmbient); //setup the ambient light
-	glLightfv(GL_LIGHT1, GL_DIFFUSE, LightDiffuse); //setup the diffuse light
-	glLightfv(GL_LIGHT1, GL_POSITION, LightPosition); //position the light
-
-	glPopMatrix();
-
-	glPushMatrix();
-
-	glLoadIdentity();
-	glTranslated(visualTarget_X, 0, dispDist - shapeDepth);
-
-	// enable matrices for use in drawing below
-	//glEnable(GL_LIGHTING);
-	//glEnable(GL_POLYGON_SMOOTH);
-	//glEnable(GL_BLEND);
-	glEnable(GL_TEXTURE_2D);
-	//glEnable(GL_NORMALIZE); //so we don't need to normalize our normal for surfaces
-
-	// bind the texture
-
-	glBindTexture(GL_TEXTURE_2D, loaded_textures[texNum]);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	// activate and specify pointer to vertex array
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glEnableClientState(GL_NORMAL_ARRAY);
-	glEnableClientState(GL_COLOR_ARRAY);
-
-	glVertexPointer(3, GL_FLOAT, 0, &vertices_vec[0]);
-	glTexCoordPointer(2, GL_FLOAT, 0, &texcoors_vec[0]);
-	glNormalPointer(GL_FLOAT, 0, &normals_vec[0]); //
-	glColorPointer(3, GL_FLOAT, 0, &colors_vec[0]);
-	glDrawElements(GL_TRIANGLES, indices_draw_triangle_vec.size(), GL_UNSIGNED_INT, &indices_draw_triangle_vec[0]);
-
-	glPopMatrix();
-
-	// deactivate vertex arrays after drawing
-	glDisableClientState(GL_VERTEX_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_NORMAL_ARRAY);
-	glDisableClientState(GL_COLOR_ARRAY);
-
-	glDisable(GL_LIGHTING);
-}
-
-
-
-std::vector<Vector3d> buildRandomDots(double shapeDepth)
-{
-	std::vector<Vector3d> dotContainer;
-
-	for (int dots_placed = 0; dots_placed < dot_number; dots_placed++)
-	{
-
-		double x = (rand() % 101) / 100.0 * stimulus_width - stimulus_width / 2;
-		double y = (rand() % 101) / 100.0 * stimulus_height - stimulus_height / 2;
-
-		double z = shapeDepth * cos(M_PI * y / stimulus_height);
-
-
-		dotContainer.push_back(Vector3d(x, y, z));
-	}
-
-	return dotContainer;
-}
-
-
-std::vector<Vector3d> buildRandomDots_Lattice(double shapeDepth, int dotNumPerRow, int dotNumPerCol, double dotJitterMax_Scale)
-{
-	std::vector<Vector3d> dotContainer;
-
-	int dot_counter_top = 0, dot_counter_bottom = 0;
-	int N_count = 2;
-
-	double step_size_x = stimulus_width / (double)(dotNumPerRow - 1);
-	double step_size_y = stimulus_height / (double)(dotNumPerCol - 1);
-
-	double dot_jitter_x_max = step_size_x * dotJitterMax_Scale;
-	double dot_jitter_y_max = step_size_y * dotJitterMax_Scale;
-
-	double x, y, z;
-
-	for (int i_y = 0; i_y < dotNumPerCol; i_y++) {
-		for (int i_x = 0; i_x < dotNumPerRow; i_x++) {
-			x = i_x * step_size_x - stimulus_width / 2 +
-				(rand() % 17) / 16.0 * dot_jitter_x_max - dot_jitter_x_max / 2;
-
-			y = i_y * step_size_y - stimulus_height / 2 +
-				(rand() % 17) / 16.0 * dot_jitter_y_max - dot_jitter_y_max / 2;
-
-			if (y < -stimulus_height / 2) {
-				y = -stimulus_height / 2;
-				z = 0;
-				dot_counter_bottom++;
-
-				if (dot_counter_bottom % N_count == 0) {
-					dotContainer.push_back(Vector3d(x, y, z));
-				}
-
-			}
-			else if (y > stimulus_height / 2) {
-				y = stimulus_height / 2;
-				z = 0;
-				dot_counter_top++;
-
-				if (dot_counter_top % N_count == 0) {
-					dotContainer.push_back(Vector3d(x, y, z));
-				}
-			}
-			else {
-
-				z = shapeDepth * cos(M_PI * y / stimulus_height);
-				dotContainer.push_back(Vector3d(x, y, z));
-			}
-
 		}
 	}
 
-	dot_number = (int)(dotContainer.size() / ratio_width_height);
 
+	buildContour_wavy(contourPanelSeparation, shapeHeight, shapeDepth, contours_vert);
 
-	return dotContainer;
+	generateRandomDots(shapeWidth, shapeHeight, shapeDepth, dot_num_per_col, dot_num_per_col, dot_jitter_max_scale, dotContainer);
+
+	dot_number = dotContainer.size();
+
 }
 
-
-void drawRandomDots(std::vector<Vector3d> dotContainer, double dispDist, double shapeDepth) {
+void drawRandomDots(const vector<Vector3d>& dotContainer) {
 
 	glPushMatrix();
-
-	glLoadIdentity();
-	glTranslated(visualTarget_X, 0, dispDist - shapeDepth + .8);
+	glTranslated(0, 0, .8);
 
 	glColor3f(0.0f, 0.0f, 0.0f);
-	//glColor3f(dispSurf_color_R, 0.0f, 0.0f);
 
 	for (int i = 0; i < int(dotContainer.size()); i++)
 	{
@@ -753,61 +324,664 @@ void drawRandomDots(std::vector<Vector3d> dotContainer, double dispDist, double 
 
 	glPopMatrix();
 
-	/*
-	switch(panel_state){
-		case no_aperture:
+}
+
+void drawContours(const ContourData& contours_vert) {
+
+	int n;
+	float panel_width = 40;
+	float panel_height_extra = 20;
+
+
+	glTranslated(0, 0, 2);
+	n = int(contours_vert.vert_Lcontour.size());
+	glColor3f(0.0f, 0.0f, 0.0f);
+	if (n > 0) {
+
+		// Right panels
+		glBegin(GL_QUAD_STRIP);
+
+		glVertex3f(contours_vert.vert_Rcontour.at(0)[0] + panel_width, contours_vert.vert_Rcontour.at(0)[1] - panel_height_extra, contours_vert.vert_Rcontour.at(0)[2]); //0
+		glVertex3f(contours_vert.vert_Rcontour.at(0)[0], contours_vert.vert_Rcontour.at(0)[1] - panel_height_extra, contours_vert.vert_Rcontour.at(0)[2]); //1
+
+		for (int i = 0; i < n; i++)
+		{
+			glVertex3f(contours_vert.vert_Rcontour.at(i)[0] + panel_width, contours_vert.vert_Rcontour.at(i)[1], contours_vert.vert_Rcontour.at(i)[2]); //0
+			glVertex3f(contours_vert.vert_Rcontour.at(i)[0], contours_vert.vert_Rcontour.at(i)[1], contours_vert.vert_Rcontour.at(i)[2]); //1
+
+		}
+
+		glVertex3f(contours_vert.vert_Rcontour.at(n - 1)[0] + panel_width, contours_vert.vert_Rcontour.at(n - 1)[1] + panel_height_extra, contours_vert.vert_Rcontour.at(n - 1)[2]); //0
+		glVertex3f(contours_vert.vert_Rcontour.at(n - 1)[0], contours_vert.vert_Rcontour.at(n - 1)[1] + panel_height_extra, contours_vert.vert_Rcontour.at(n - 1)[2]); //1
+
+		glEnd();
+
+		// Left panels
+		glBegin(GL_QUAD_STRIP);
+
+		glVertex3f(contours_vert.vert_Lcontour.at(0)[0], contours_vert.vert_Lcontour.at(0)[1] - panel_height_extra, contours_vert.vert_Lcontour.at(0)[2]); //0
+		glVertex3f(contours_vert.vert_Lcontour.at(0)[0] - panel_width, contours_vert.vert_Lcontour.at(0)[1] - panel_height_extra, contours_vert.vert_Lcontour.at(0)[2]); //1
+
+		for (int i = 0; i < n; i++)
+		{
+			glVertex3f(contours_vert.vert_Lcontour.at(i)[0], contours_vert.vert_Lcontour.at(i)[1], contours_vert.vert_Lcontour.at(i)[2]); //0
+			glVertex3f(contours_vert.vert_Lcontour.at(i)[0] - panel_width, contours_vert.vert_Lcontour.at(i)[1], contours_vert.vert_Lcontour.at(i)[2]); //1
+
+		}
+
+		glVertex3f(contours_vert.vert_Lcontour.at(n - 1)[0], contours_vert.vert_Lcontour.at(n - 1)[1] + panel_height_extra, contours_vert.vert_Lcontour.at(n - 1)[2]); //0
+		glVertex3f(contours_vert.vert_Lcontour.at(n - 1)[0] - panel_width, contours_vert.vert_Lcontour.at(n - 1)[1] + panel_height_extra, contours_vert.vert_Lcontour.at(n - 1)[2]); //1
+
+		glEnd();
+	}
+
+}
+
+void drawRandomDotSurface(double distShapeToEye, const VerticesData& vertices_data, const vector<Vector3d>& dotContainer, const ContourData& contours_vert) {
+
+	glPushMatrix();
+
+	glLoadIdentity();
+	glTranslated(0, 0, -distShapeToEye);
+
+	// activate and specify pointer to vertex array
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+
+	glVertexPointer(3, GL_FLOAT, 0, &vertices_data.vertices_vec[0]);
+	glColorPointer(3, GL_FLOAT, 0, &vertices_data.colors_vec[0]);
+	glDrawElements(GL_TRIANGLES, vertices_data.indices_draw_triangle_vec.size(), GL_UNSIGNED_INT, &vertices_data.indices_draw_triangle_vec[0]);
+
+	// deactivate vertex arrays after drawing
+	glDisableClientState(GL_VERTEX_ARRAY);
+	glDisableClientState(GL_COLOR_ARRAY);
+
+	drawRandomDots(dotContainer);
+	drawContours(contours_vert);
+
+	glPopMatrix();
+}
+
+/*************************** FUNCTIONS: texture surface ***********************************/
+double getTg(double shapeHeight, double shapeDepth, double Y) {
+	return (-shapeDepth * sin(M_PI * Y / shapeHeight) * M_PI / shapeHeight);
+}
+
+float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth_flat, double Depth_deep) {
+	float newDiff = ambInt;
+	newDiff = newDiff + (textDepth - Depth_flat) / (Depth_deep - Depth_flat) * (maxInt - 2 * ambInt);
+	return newDiff;
+}
+
+double NewtonSolver_fz(double z, double Depth, double zCoeff, double distShapeToEye) {
+	double val = z / Depth - cos(zCoeff * (z - distShapeToEye));
+	return val;
+}
+
+double NewtonSolver_dfz(double z, double Depth, double zCoeff, double distShapeToEye) {
+	double val = 1 / Depth + sin(zCoeff * (z - distShapeToEye)) * zCoeff;
+	return val;
+}
+
+double SolveForZ_projected(double theHeight, double newDepth, double distShapeToEye, double y0, double z0) {
+
+	double z_new, z, f_z, df_z;
+	double C = M_PI * y0 / (theHeight * (z0 - distShapeToEye));
+
+	z = z0;
+
+	for (int i = 0; i < 100; i++) {
+
+		f_z = NewtonSolver_fz(z, newDepth, C, distShapeToEye);
+		df_z = NewtonSolver_dfz(z, newDepth, C, distShapeToEye);
+
+		if (abs(f_z) < 1e-10) {
+
 			break;
+		}
+		else if (abs(df_z) < 1e-10) {
 
-		case black_aperture:
-			glPushMatrix();
-			glLoadIdentity();
-			glTranslated(visualTarget_X, 0, dispDist + 2);
-			glColor3f(0.0f, 0.0f, 0.0f);
-
-			drawBlockingPanels((dispDist/(dispDist - shapeDepth)) * stimulus_height);
-			//such that the separation has the same visual angle of the stimulusheight
-			glPopMatrix();
 			break;
+		}
+		else {
+			z_new = z - f_z / df_z;
+			z = z_new;
+		}
+	}
 
-		case red_aperture:
-			glPushMatrix();
-			glLoadIdentity();
-			glTranslated(visualTarget_X, 0, dispDist + 2);
-			glColor3f(0.4f, 0.0f, 0.0f);
+	if (abs(z - z0) > 40)
+		z = 0;
 
-			drawBlockingPanels((dispDist/(dispDist - shapeDepth)) * stimulus_height);
-			glPopMatrix();
-			break;
+	return z;
 
+}
+
+Vector3d projectPoint(double shapeHeight, double newDepth, double distShapeToEye, Vector3d fromPoint) {
+
+	Vector3d ToPoint = fromPoint;
+	if (abs(abs(fromPoint.y()) - shapeHeight / 2) > 0.01) {
+		double z = SolveForZ_projected(shapeHeight, newDepth, distShapeToEye, fromPoint.y(), fromPoint.z());
+		double w = (z - distShapeToEye) / (fromPoint.z() - distShapeToEye);
+		ToPoint = Vector3d(w * fromPoint.x(), w * fromPoint.y(), z);
+	}
+
+	return ToPoint;
+}
+
+double normalCDF(double value)
+{
+	double M_SQRT1_2 = sqrt(0.5);
+	return 0.5 * erfc(-value * M_SQRT1_2);
+}
+
+double blurEdge(double dropoff, double pointDist, double intersectDist, double baseCol, double maxCol) {
+
+	// given an Radius, I will choose the intersectDist to be 2/(1+dropoff)
+	double addCol = maxCol - baseCol;
+	return(((pointDist / intersectDist) < dropoff) ? baseCol : (baseCol + addCol * normalCDF(((pointDist / intersectDist - dropoff) / (1 - dropoff) * 6) - 3)));
+}
+
+void scanCurve(double shapeHeight, double shapeDepth, CurveYLMap& output_curve_ylmap) {
+
+	// go through the cosine curve with input height and depth, equally sample nr_curve_map dots and mark the paired y_l values at these points
+	output_curve_ylmap = {};
+
+	double y, z, l, y_prev, z_prev;
+	double step_size = (shapeHeight / (nr_curve_map - 1));
+
+	output_curve_ylmap.curve_depth = shapeDepth;
+	output_curve_ylmap.curve_height = shapeHeight;
+	output_curve_ylmap.step_size = step_size;
+
+	// the first point
+	y = -shapeHeight / 2;
+	z = 0;
+	l = 0;
+	y_prev = y, z_prev = z;
+	output_curve_ylmap.y_vec.push_back(y);
+	output_curve_ylmap.l_vec.push_back(l);
+
+
+	for (int j = 1; j < nr_curve_map; j++) {
+		y = -shapeHeight / 2 + j * step_size;
+		z = getZ(shapeHeight, shapeDepth, y);
+		l = l + sqrt(pow(y - y_prev, 2) + pow(z - z_prev, 2));
+
+		output_curve_ylmap.y_vec.push_back(y);
+		output_curve_ylmap.l_vec.push_back(l);
+
+		y_prev = y; z_prev = z;
+	}
+
+
+}
+
+void projectCurve(const CurveYLMap& curve_map_proj, double distShapeToEye, const CurvePtsData& origin_curve, CurvePtsData& output_curve_proj) {
+
+	output_curve_proj = {};
+
+	double newDepth = curve_map_proj.curve_depth;
+	double height = curve_map_proj.curve_height;
+	double step_y_ylmap = curve_map_proj.step_size;
+
+	output_curve_proj.curve_height = height;
+	output_curve_proj.curve_depth = newDepth;
+
+	double y_p, z_p, l_p, tg_p;
+
+
+	for (int jj = 0; jj < origin_curve.y_vec.size(); jj++) {
+
+		double y_o = origin_curve.y_vec[jj];
+		double z_o = origin_curve.z_vec[jj];
+		z_p = SolveForZ_projected(height, newDepth, distShapeToEye, y_o, z_o);
+		double w = (z_p - distShapeToEye) / (z_o - distShapeToEye);
+		y_p = w * y_o;
+		int i_c = (y_p - curve_map_proj.y_vec[0]) / step_y_ylmap;
+		l_p = curve_map_proj.l_vec[i_c];
+
+		output_curve_proj.y_vec.push_back(y_p);
+		output_curve_proj.z_vec.push_back(z_p);
+		output_curve_proj.l_vec.push_back(l_p);
 
 	}
 
-	*/
+}
+
+int buildCurve_byDelY(const CurveYLMap& input_curve_ylmap, CurvePtsData& output_curve) {
+
+	output_curve = {};
+
+	double depth = input_curve_ylmap.curve_depth;
+	output_curve.curve_depth = depth;
+	double height = input_curve_ylmap.curve_height;
+	output_curve.curve_height = height;
+	double y, l;
+
+	double stpsz_J = height / (nr_points_height_default - 1);
+	double stpsz_ycurve_precise = height / (nr_curve_map - 1);
+	for (int j = 0; j < nr_points_height_default; j++) {
+		int k = stpsz_J * j / stpsz_ycurve_precise;
+		y = input_curve_ylmap.y_vec[k];
+		output_curve.y_vec.push_back(y);
+		output_curve.z_vec.push_back(getZ(height, depth, y));
+		output_curve.l_vec.push_back(input_curve_ylmap.l_vec[k]);
+	}
+
+	return output_curve.y_vec.size();
+}
+
+bool generateTexture(float TM_X, float TM_Y, float dotDensity, float dotRadius, float dotSeparationRatio_init, int nr_X_Lattice, float dotJitterScale_Lattice, TextureDotsData& outputTexDots) {
+
+	// the hybrid here refers to employing two methods to generate dots: 
+	// method 1: lattice with some jitter
+	// method 2: random placement with minimum distance constraint
+	// 
+	// INPUT:
+	// TM_X & TM_Y control the dimension of texture map
+	// dotDensity controls how dense the dots are
+	// dotSeparationRatio_init controls the minimum distance between two dots, but it is an initial value, it may decrease if it constrains placing all dots in desingiated area
+	// nr_X_Lattice controls the number of dots on each row of the lattice
+	// dotJitterScale_Lattice controls the scale of jitter of dots on lattice
+	// OUTPUT:
+	// outputTexDots are TextureDotsData, the most important component is a vector of dot centers (coordinate origin is at the center of the TM) 
+	// the dot center x takes value from -TM_X/2 to TM_X/2, the dot center y takes value from -TM_Y/2 to TM_Y/2
+
+	outputTexDots = {};
+
+	outputTexDots.TexMapSize = Vec2{ TM_X, TM_Y };
+	outputTexDots.Radius = dotRadius;
+	outputTexDots.margin_y = R_intersect_factor * dotRadius;
+
+	std::uniform_real_distribution<float> dist(0.f, 1.f); // require <random>
+
+
+	vector<Vec2> dc_vec;
+
+	int num_dot = TM_X * TM_Y * dotDensity;
+
+	// prep lattice
+	int nr_X = nr_X_Lattice;
+	int nr_Y = floor(TM_Y * nr_X / TM_X);
+	if (nr_Y % 2 == 0) {
+		nr_Y++;
+	}
+	float lat_step_x = TM_X / (float)nr_X;
+	float lat_step_y = TM_Y / (float)nr_Y;
+
+
+
+	// step 1: generate lattice dots
+	for (int j = 0; j < nr_Y; j++) {
+		for (int i = 0; i < nr_X; i++) {
+			float rx = dist(rng);
+			float ry = dist(rng);
+			float cx_lat = ((rx - 0.5) * dotJitterScale_Lattice + i + 0.5) * lat_step_x;
+			float cy_lat = ((ry - 0.5) * dotJitterScale_Lattice + j + 0.5) * lat_step_y;
+
+			dc_vec.push_back(Vec2{ cx_lat, cy_lat });
+		}
+	}
+
+
+	// step 2: random placement with minimum distance constraint
+	float dotSeparationRatio_adjust = dotSeparationRatio_init;
+	float dot_separation = dotSeparationRatio_adjust * 2 * (dotRadius * R_intersect_factor);
+
+	int reset_count = 0;
+	int dotplacement_runs = 0;
+
+	for (int i_dot = nr_X * nr_Y; i_dot < num_dot; i_dot++) {
+
+		dotplacement_runs++;
+
+		// step 2.1: check whether needs to reset or exit
+		// too many unsuccessful placements leads to reset, too many resets leads to exit()
+		if (dotplacement_runs > 10000) {
+
+			reset_count++;
+
+			if (reset_count < 10000) {
+
+				//too many unsuccessful placements leads to reset
+				dotplacement_runs = 0;
+				dc_vec.clear();
+
+				for (int j = 0; j < nr_Y; j++) {
+					for (int i = 0; i < nr_X; i++) {
+
+						float rx = dist(rng);
+						float ry = dist(rng);
+						float cx_lat = ((rx - 0.5) * dotJitterScale_Lattice + i + 0.5) * lat_step_x;
+						float cy_lat = ((ry - 0.5) * dotJitterScale_Lattice + j + 0.5) * lat_step_y;
+
+						dc_vec.push_back(Vec2{ cx_lat, cy_lat });
+					}
+				}
+
+				i_dot = nr_X * nr_Y;
+
+				int adjust_count = floor(reset_count / (float)50); // make one adjustment after repeating fifty attempts
+				dotSeparationRatio_adjust = dotSeparationRatio_adjust - 0.000005 * (float)adjust_count * (float)num_dot;
+				dot_separation = dotSeparationRatio_adjust * 2 * (dotRadius * R_intersect_factor);
+			}
+			else {
+				return false;
+			}
+
+		}
+
+
+		// step 2.2: placing one dot at a time
+		// pick random xy values for the circle center
+		float cx = dist(rng); // 0-1
+		float cy = dist(rng); // 0-1
+		cx *= TM_X;
+		cy *= TM_Y;
+
+		// checking whether the current circle intersects withe the previous circles already pushed
+		bool intersect = false;
+		for (int k = 0; k < dc_vec.size(); k++) {
+			Vec2 prev_c = dc_vec[k];
+			if ((cx - prev_c.x) * (cx - prev_c.x) + (cy - prev_c.y) * (cy - prev_c.y) < dot_separation * dot_separation) {
+				intersect = true;
+				break;
+			}
+		}
+		// if intersect, then break and pick a new circle center
+		if (intersect) {
+			i_dot--;
+			continue;
+		}
+
+		// if not intersect, add this circle to the circles vector
+		dc_vec.push_back(Vec2{ cx, cy });
+	}
+
+
+	// step 3: sort the dots by their y. Get the correponding indices
+	int n_dots = dc_vec.size();
+
+	vector<float> dc_y_vec;
+	for (int k = 0; k < n_dots; k++) {
+		dc_y_vec.push_back(dc_vec[k].y);
+	}
+	vector<int> sortedDC_ind_vec(n_dots);
+	std::iota(sortedDC_ind_vec.begin(), sortedDC_ind_vec.end(), 0); //Initializing
+	std::sort(sortedDC_ind_vec.begin(), sortedDC_ind_vec.end(), [&](int i, int j) {return dc_y_vec[i] < dc_y_vec[j]; });
+
+
+
+	// step 4: fill in outputTexDots dot center vectors, in the order of from low y to high y
+	float x_offset = TM_X / 2.;
+	float y_offset = TM_Y / 2.;
+	for (int k = 0; k < n_dots; k++) {
+		Vec2 dc_temp = dc_vec[sortedDC_ind_vec[k]];
+		outputTexDots.dot_center_vec.push_back(Vec2{ dc_temp.x - x_offset, dc_temp.y - y_offset });
+	}
+
+	return true;
+
+}
+
+void buildContour_Texture(double ContourWidth, const CurvePtsData& dispYCurve, const CurvePtsData& textYCurve, float distShapeToEye, ContourData& new_contours_vert) {
+
+	new_contours_vert = {};
+
+	for (int i_v = 0; i_v < dispYCurve.y_vec.size(); i_v++) {
+
+		float x_t_L = -ContourWidth / 2;
+		float x_t_R = ContourWidth / 2;
+
+		float z_t = textYCurve.z_vec[i_v];
+
+		float y_d = dispYCurve.y_vec[i_v];
+		float z_d = dispYCurve.z_vec[i_v];
+
+		float w = (distShapeToEye - z_d) / (distShapeToEye - z_t);
+		//float w = (distShapeToEye - z_d) / (distShapeToEye - (z_t + z_d) / 2.0);
+		float x_v_L = w * x_t_L;
+		float x_v_R = w * x_t_R;
+
+		new_contours_vert.vert_Lcontour.push_back(Vector3f(x_v_L, y_d, z_d));
+		new_contours_vert.vert_Rcontour.push_back(Vector3f(x_v_R, y_d, z_d));
+	}
+}
+
+void buildVertices_Texture(double shapeWidth, const CurvePtsData& dispYCurve, const CurvePtsData& textYCurve, double distShapeToEye, TextureDotsData& TexDotsOnText, VerticesData& vertices_data) {
+
+	vertices_data = {};
+
+	GLuint i_ind = 0;
+	int nr_J = dispYCurve.y_vec.size();
+	double stpsz_I = shapeWidth / (nr_points_width - 1);
+	double height = textYCurve.curve_height;
+	double depth_text = textYCurve.curve_depth;
+	float x_offset = TexDotsOnText.TexMapSize.x / 2;
+
+	// for texture colors
+	float vertex_col = 1.0f;
+	int nr_dots = TexDotsOnText.dot_center_vec.size();
+	float R = TexDotsOnText.Radius;
+
+	float L_start = -textYCurve.l_vec.back() / 2.;
+	float l_margin = TexDotsOnText.margin_y;
+
+	std::uniform_real_distribution<float> dist(0.f, 1.f); // require <random>
+	float L_offset = dist(rng) - 0.5f;
+	//L_offset = L_offset * (TexDotsOnText.TexMapSize.y - textYCurve.l_vec.back() - 2 * TexDotsOnText.margin_y);
+	L_offset = L_offset * 2 * R;
+	L_start = L_start + L_offset;
+
+	int TexDot_Ind_L = 0;
+	int TexDot_Ind_H = 0;
+	vector<Vec2> nearTexDots_dc_vec;
+
+	for (int jj = 0; jj < nr_J; jj++) {
+
+		float y_d = dispYCurve.y_vec[jj];
+		float z_d = dispYCurve.z_vec[jj];
+
+		float y_t = textYCurve.y_vec[jj];
+		float z_t = textYCurve.z_vec[jj];
+
+		float tg_t = getTg(height, depth_text, y_t);
+
+		float w = (distShapeToEye - z_d) / (distShapeToEye - z_t);
+		float x_d;
+
+		double TM_y_t = textYCurve.l_vec[jj] + L_start;
+
+		// find the dots that are near TM_y_t
+		while (((TexDotsOnText.dot_center_vec[TexDot_Ind_L].y) < ((float)TM_y_t - l_margin)) && TexDot_Ind_L < (nr_dots - 1)) {
+			TexDot_Ind_L++;
+		}
+
+
+		TexDot_Ind_H = TexDot_Ind_L;
+		while (((TexDotsOnText.dot_center_vec[TexDot_Ind_H].y) < ((float)TM_y_t + l_margin)) && TexDot_Ind_H < (nr_dots - 1)) {
+			TexDot_Ind_H++;
+		}
+
+		nearTexDots_dc_vec.clear();
+		for (int k = TexDot_Ind_L; k < TexDot_Ind_H + 1; k++) {
+			nearTexDots_dc_vec.push_back(TexDotsOnText.dot_center_vec[k]);
+		}
+		int nr_dots_near = nearTexDots_dc_vec.size();
+
+
+		for (int ii = 0; ii < nr_points_width; ii++) {
+
+			double pt_x = stpsz_I * ii - x_offset;
+			double pt_y = TM_y_t;
+			vertex_col = texture_col_max;
+
+
+
+			for (int k = 0; k < nr_dots_near; k++) {
+
+				double pt_val = sqrt((pt_x - nearTexDots_dc_vec[k].x) * (pt_x - nearTexDots_dc_vec[k].x) +
+					(pt_y - nearTexDots_dc_vec[k].y) * (pt_y - nearTexDots_dc_vec[k].y));
+
+
+				if (pt_val < R_intersect_factor * R) {
+					double vertex_col_tentative = blurEdge(drop_off_rate, pt_val, R_intersect_factor * R, texture_col_min, texture_col_max);
+					vertex_col = float(vertex_col_tentative);
+					break;
+				}
+
+			}
+
+			x_d = w * pt_x;
+
+
+			vertices_data.vertices_vec.push_back(x_d);
+			vertices_data.vertices_vec.push_back(y_d);
+			vertices_data.vertices_vec.push_back(z_d);
+
+			vertices_data.light_normals_vec.push_back(0);
+			vertices_data.light_normals_vec.push_back(-tg_t);
+			vertices_data.light_normals_vec.push_back(1);
+
+
+			vertices_data.colors_vec.push_back(vertex_col);
+			vertices_data.colors_vec.push_back(0);
+			vertices_data.colors_vec.push_back(0);
+
+			if (ii < nr_points_width - 1 && jj < nr_J - 1) {
+
+				// using vector
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + 1);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + nr_points_width);
+
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + nr_points_width);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + 1);
+				vertices_data.indices_draw_triangle_vec.push_back(i_ind + nr_points_width + 1);
+
+			}
+
+			i_ind++;
+		}
+	}
+
+}
+
+bool buildTextureSurface(double shapeWidth, double shapeHeight, double dispDepth, double textDepth, double distShapeToEye, double contourPanelSeparation, VerticesData& vertices_data, ContourData& contours_vert)
+{
+
+	// part 1: generate TexDots and project to Disp Surface
+	CurveYLMap ylMap_Text;
+	scanCurve(shapeHeight, textDepth, ylMap_Text);
+	float l_text = ylMap_Text.l_vec.back();
+
+
+	// part 3: generate surface vertices
+	CurvePtsData y_curve_data_text_m, y_curve_data_disp_m;
+	nr_points_height = buildCurve_byDelY(ylMap_Text, y_curve_data_text_m);
+
+	if (abs(dispDepth - textDepth) < 0.1) {
+		y_curve_data_disp_m = y_curve_data_text_m;
+	}
+	else {
+		CurveYLMap ylMap_Disp;
+		scanCurve(shapeHeight, dispDepth, ylMap_Disp);
+		projectCurve(ylMap_Disp, distShapeToEye, y_curve_data_text_m, y_curve_data_disp_m);
+	}
+
+
+	//Tex_dot_radius = Tex_dot_radius_base + (float)(rand() % 11) * 0.012;
+	TextureDotsData Tex_Dots_text;
+	bool texdots_ready = generateTexture(shapeWidth, lengthFactor_TM * l_text, Tex_dot_density, Tex_dot_radius, Tex_dot_separation_ratio, TexDot_Lat_nr, TexDot_Lat_jitter, Tex_Dots_text);
+
+	if (!texdots_ready) {
+		current_stage = trial_error;
+		return false;
+	}
+
+	buildVertices_Texture(shapeWidth, y_curve_data_disp_m, y_curve_data_text_m, distShapeToEye, Tex_Dots_text, vertices_data);
+
+	buildContour_Texture(contourPanelSeparation, y_curve_data_disp_m, y_curve_data_text_m, distShapeToEye, contours_vert);
+
+	dot_number = Tex_Dots_text.dot_center_vec.size() / lengthFactor_TM;
+
+	return true;
+
+}
+
+void drawTextureSurface(double distShapeToEye, const VerticesData& vertices_data, const ContourData& contours_vert) {
+
+	//setting the light
+	glShadeModel(GL_SMOOTH); // enable Smooth Shading
+	glEnable(GL_LIGHTING); // enable lighting
+	glEnable(GL_LIGHT1);
+	glEnable(GL_NORMALIZE); //so we don't need to normalize our normal for surfaces	
+
+	// Light source parameters
+	GLfloat LightAmbient[] = { light_amb, 0.0f, 0.0f, 1.0f }; // non-directional & overall light (r,g,b,alpha): dark part
+	GLfloat LightDiffuse[] = { light_dif, 0.0f, 0.0f, 1.0f }; // light created by the light source (directional light; r,g,b,alpha): bright part
+	GLfloat LightPosition[] = { 0.0f, 1.f, lightDir_z, 0.0f }; // Light Position (x, y, z, 1.0f); if w==0, directional; if w==1, positional lights. Attenuation can be applied only to the positional light 
+
+	//setting the light
+	glLightfv(GL_LIGHT1, GL_AMBIENT, LightAmbient); //setup the ambient light
+	glLightfv(GL_LIGHT1, GL_DIFFUSE, LightDiffuse); //setup the diffuse light
+	glLightfv(GL_LIGHT1, GL_POSITION, LightPosition); //position the light
+
+	glPushMatrix();
+	glLoadIdentity();
+	glTranslated(0, 0, -distShapeToEye);
+
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_BLEND);
+
+	// activate and specify pointer to vertex array
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_NORMAL_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+
+	//using vector
+	glVertexPointer(3, GL_FLOAT, 0, &vertices_data.vertices_vec[0]);
+	glNormalPointer(GL_FLOAT, 0, &vertices_data.light_normals_vec[0]); //
+	glColorPointer(3, GL_FLOAT, 0, &vertices_data.colors_vec[0]);
+	glDrawElements(GL_TRIANGLES, vertices_data.indices_draw_triangle_vec.size(), GL_UNSIGNED_INT, &vertices_data.indices_draw_triangle_vec[0]);
+
+	// deactivate vertex arrays after drawing
+	glDisableClientState(GL_VERTEX_ARRAY);
+	glDisableClientState(GL_NORMAL_ARRAY);
+	glDisableClientState(GL_COLOR_ARRAY);
+
+	glDisable(GL_LIGHTING);
+
+	drawContours(contours_vert);
+	glPopMatrix();
+
 }
 
 
-void drawBlockingPanels(double pandelSeparation) {
 
-	double panel_w = 20, panel_h = 80;
+void initStimulus(double stimulusDepth) {
 
-	// left panel
-	glDisable(GL_TEXTURE_2D);
+	display_distance_jittered = display_distance + jitter_z;
+	dist_toEye = -(display_distance_jittered - stimulusDepth);
+	stimulus_height = tan((DEG2RAD * visual_angle) / 2) * 2 * dist_toEye;
+	stimulus_width = ratio_width_height * stimulus_height;
+	stimulus_visiblewidth = ratio_visiblewidth_height * stimulus_height;
 
-	glBegin(GL_QUADS);
-	glVertex3f(-pandelSeparation / 2 - panel_w, panel_h / 2, 0.0f);
-	glVertex3f(-pandelSeparation / 2, panel_h / 2, 0.0f);
-	glVertex3f(-pandelSeparation / 2, -panel_h / 2, 0.0f);
-	glVertex3f(-pandelSeparation / 2 - panel_w, -panel_h / 2, 0.0f);
-	glEnd();
+	if (testing_texture_vs_disparity) {
+		stimulus_built = buildTextureSurface(stimulus_width, stimulus_height, stimulusDepth, stimulusDepth, dist_toEye, stimulus_visiblewidth, my_verts, my_contour_data);
+		light_dif = adjustDiffLight(stimulusDepth, max_intensity, light_amb, light_depthMin, light_depthMax);
+	}
+	else {
+		buildRandomDotSurface(stimulus_width, stimulus_height, stimulusDepth, stimulus_visiblewidth, my_verts, dot_container, my_contour_data);
+		stimulus_built = true;
+	}
 
-	// right panel
-	glBegin(GL_QUADS);
-	glVertex3f(pandelSeparation / 2, panel_h / 2, 0.0f);
-	glVertex3f(pandelSeparation / 2 + panel_w, panel_h / 2, 0.0f);
-	glVertex3f(pandelSeparation / 2 + panel_w, -panel_h / 2, 0.0f);
-	glVertex3f(pandelSeparation / 2, -panel_h / 2, 0.0f);
-	glEnd();
+	dot_number = ratio_visiblewidth_height / ratio_width_height * dot_number;
 }
+
+
+
+
 
 void drawFixation(double dispDist) {
 	// draws a small fixation cross at the center of the display
@@ -862,6 +1036,8 @@ void initProjectionScreen(double _focalDist, const Affine3d& _transformation, bo
 // Initialize Optotrak for use in the experiment
 void initOptotrak()
 {
+	initRotationM();
+
 	optotrak.setTranslation(calibration);
 
 	if (optotrak.init(LastAlignedFile, OPTO_NUM_MARKERS, OPTO_FRAMERATE, OPTO_MARKER_FREQ, OPTO_DUTY_CYCLE, OPTO_VOLTAGE) != 0)
@@ -903,10 +1079,15 @@ void initMotors()
 // seems like this is not changed for each experiment (maybe for different experimental setup eg monitor)
 void initRendering()
 {
+	if (monocular_display) {
+		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+	}
+	else {
+		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_STEREO);
+	}
 
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glClearAccum(0.0, 0.0, 0.0, 0.0);
 	/* Set depth buffer clear value */
 	glClearDepth(1.0);
 	/* Enable depth test */
@@ -915,67 +1096,10 @@ void initRendering()
 	glDepthFunc(GL_LEQUAL);
 	// scommenta solo se vuoi attivare lo shading degli stimoli
 
-	if (testing_texture_vs_disparity) {
-		// texture
-		glEnable(GL_MULTISAMPLE);
-		glHint(GL_MULTISAMPLE_FILTER_HINT_NV, GL_NICEST);
-
-		glShadeModel(GL_SMOOTH); // enable Smooth Shading
-		glEnable(GL_NORMALIZE); //so we don't need to normalize our normal for surfaces
-		glEnable(GL_COLOR_MATERIAL);
-	}
-	else {
-		// disparity
-		glEnable(GL_POLYGON_SMOOTH);
-		glEnable(GL_POINT_SMOOTH);
-		glEnable(GL_LINE_SMOOTH);
-		glEnable(GL_BLEND);
-
-		glHint(GL_POLYGON_SMOOTH_HINT, GL_DONT_CARE);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glEnable(GL_NORMALIZE); //so we don't need to normalize our normal for surfaces
-		glEnable(GL_COLOR_MATERIAL);
-	}
-
-	/*
-
-
-		//texture-only
-		glEnable(GL_MULTISAMPLE);
-		glHint(GL_MULTISAMPLE_FILTER_HINT_NV, GL_NICEST);
-
-	}else{
-		// disparity-only, random dots
-		glEnable(GL_LINE_SMOOTH);
-		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-		glEnable(GL_POINT_SMOOTH);
-		glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	}
-*/
-
-
-
-//glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
-	//glEnable(GL_MULTISAMPLE);
-	//glHint(GL_MULTISAMPLE_FILTER_HINT_NV, GL_NICEST);
-
-	//glBlendFunc(GL_ZERO, GL_ONE);
-	//glBlendFunc(GL_ZERO, GL_ZERO);
-	//glBlendFunc(GL_ONE, GL_ONE);
-	//glBlendFunc(GL_ONE,GL_ZERO );
-	//glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR);
-	//glBlendFunc(GL_SRC_COLOR, GL_DST_COLOR);
-	//glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_DST_COLOR);
-
-	//glBlendFunc(GL_SRC_COLOR,GL_ZERO );
-
-
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-
+	// Tieni questa riga per evitare che con l'antialiasing attivo le linee siano piu' sottili di un pixel e quindi
+	// ballerine (le vedi vibrare)
 	glLineWidth(1.5);
 }
 
@@ -987,10 +1111,10 @@ void initStreams()
 	parametersFile_subj.open(parametersFileName_subj.c_str());
 	parameters_subj.loadParameterFile(parametersFile_subj);
 	subjectName = parameters_subj.find("SubjectName");
-	//interoculardistance = str2num<double>(parameters_subj.find("IOD"));
+	interoculardistance = str2num<double>(parameters_subj.find("IOD"));
 	display_distance = str2num<double>(parameters_subj.find("dispDepth"));
-	// Subject name
 
+	training_cue = str2num<int>(parameters_subj.find("TRAINING_Cue"));
 
 	string session = parameters_subj.find("PROBE_Session");
 	sessionNum = str2num<int>(session);
@@ -1045,39 +1169,8 @@ void initStreams()
 	responseFile.open(responseFileName.c_str());
 	responseFile << fixed << responseFile_headers << endl;
 
-	//globalTimer.start();
 
 
-	responseFile.open(responseFileName.c_str());
-	responseFile << fixed << responseFile_headers << endl;
-
-}
-
-
-
-void initVariables()
-{
-	blkNum = (sessionNum - 1) * 2 + 1;
-
-	stimulus_height = tan((DEG2RAD * visual_angle) / 2) * 2 * (abs(display_distance));
-	stimulus_width = ratio_width_height * stimulus_height;
-
-	if (testing_texture_vs_disparity && monocular_display) {
-		left_eye_on = rand() % 2;
-	}
-
-}
-
-void initBlock()
-{
-
-	setViewingVar();
-
-	// initialize the trial matrix
-	trial.init(parameters);
-	trial.next();
-
-	//trialNum = 1;
 }
 
 void setViewingVar() {
@@ -1095,7 +1188,6 @@ void setViewingVar() {
 			left_eye_on = true;
 			right_eye_on = true;
 		}
-
 	}
 	else { //testing disparity
 
@@ -1107,13 +1199,40 @@ void setViewingVar() {
 
 }
 
+void initVariables()
+{
+	blkNum = (sessionNum - 1) * 2 + 1;
+
+	//stimulus_height = tan((DEG2RAD * visual_angle) / 2) * 2 * (abs(display_distance));
+	//stimulus_width = ratio_width_height * stimulus_height;
+
+	if (testing_texture_vs_disparity && monocular_display) {
+		left_eye_on = rand() % 2;
+	}
+
+	setViewingVar();
+
+}
+
+void initBlock()
+{
+	// initialize the trial matrix
+	trial.init(parameters);
+	trial.next();
+
+	//trialNum = 1;
+}
+
+
+
 // Initialize the streams, open the file and write to it
 
 void drawGLScene()
 {
 
 	if (monocular_display) {
-		//glDrawBuffer(GL_BACK);
+
+		glDrawBuffer(GL_BACK);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		cam.setEye(eyeMiddle);
@@ -1121,10 +1240,10 @@ void drawGLScene()
 		drawInfo();
 
 		glutSwapBuffers();
+		glutPostRedisplay();
 
 	}
 	else {
-		//glDrawBuffer(GL_BACK);
 
 		// Draw left eye view
 		glDrawBuffer(GL_BACK_RIGHT);
@@ -1146,6 +1265,7 @@ void drawGLScene()
 		drawStimulus();
 
 		glutSwapBuffers();
+		glutPostRedisplay();
 	}
 
 }
@@ -1239,6 +1359,9 @@ void drawInfo()
 
 			// check if mirror is calibrated				
 			text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment));
+			text.draw("# Mirror1 Marker " + stringify<int>(mirror1) + " : x = " + stringify<double>(markers[mirror1].p.x()) + " y = " + stringify<double>(markers[mirror1].p.y()) + " z = " + stringify<double>(markers[mirror1].p.z()));
+			text.draw("# Mirror2 Marker " + stringify<int>(mirror2) + " : x = " + stringify<double>(markers[mirror2].p.x()) + " y = " + stringify<double>(markers[mirror2].p.y()) + " z = " + stringify<double>(markers[mirror2].p.z()));
+
 
 			if (left_eye_on)
 				text.draw("# L: OOOOO");
@@ -1327,18 +1450,11 @@ void drawStimulus()
 	case stimulus_preview:
 
 		if (testing_texture_vs_disparity) {
-			// testing texture, build vertices for curved surface
-			drawVertices_textureMap(texnum, display_distance_jittered, depth_test);
-
+			drawTextureSurface(dist_toEye, my_verts, my_contour_data);
 		}
 		else {
-			// testing disparity, build random dots
-			//drawRandomDots(dot_container, display_distance_jittered, depth_test);
-
-			drawVertices_randomDot(display_distance_jittered, depth_test);
-			drawRandomDots(dot_container, display_distance_jittered, depth_test);
+			drawRandomDotSurface(dist_toEye, my_verts, dot_container, my_contour_data);
 		}
-
 		break;
 
 	case trial_fixate:
@@ -1347,16 +1463,10 @@ void drawStimulus()
 
 	case trial_view:
 		if (testing_texture_vs_disparity) {
-			// testing texture, build vertices for curved surface
-
-			drawVertices_textureMap(texnum, display_distance_jittered, depth_test);
+			drawTextureSurface(dist_toEye, my_verts, my_contour_data);
 		}
 		else {
-			// testing disparity, build random dots
-			//drawRandomDots(dot_container, display_distance_jittered, depth_test);
-
-			drawVertices_randomDot(display_distance_jittered, depth_test);
-			drawRandomDots(dot_container, display_distance_jittered, depth_test);
+			drawRandomDotSurface(dist_toEye, my_verts, dot_container, my_contour_data);
 		}
 		break;
 
@@ -1364,19 +1474,13 @@ void drawStimulus()
 	case trial_confirm:
 
 		if (testing_texture_vs_disparity) {
-			// testing texture, build vertices for curved surface
-
-			drawVertices_textureMap(texnum, display_distance_jittered, depth_test);
+			drawTextureSurface(dist_toEye, my_verts, my_contour_data);
 		}
 		else {
-			// testing disparity, build random dots
-			//drawRandomDots(dot_container, display_distance_jittered, depth_test);
-
-			drawVertices_randomDot(display_distance_jittered, depth_test);
-			drawRandomDots(dot_container, display_distance_jittered, depth_test);
+			drawRandomDotSurface(dist_toEye, my_verts, dot_container, my_contour_data);
 		}
 
-		drawProbe(display_distance_jittered + probe_jitter_z, probe_depth);
+		drawProbe(display_distance + probe_jitter_z, probe_depth, probe_verts);
 		break;
 
 	case break_time:
@@ -1387,121 +1491,8 @@ void drawStimulus()
 
 	}
 }
-/*
-double getZ(double theHeight, double theDepth, double currentY){
-
-	double currentZ;
-
-	switch(current_shape){
-
-		case Ridge:
-
-		if(theDepth < theHeight / 2 )
-		{
-			double R = (pow(theDepth, 2) + pow((theHeight / 2.), 2)) / (2 * theDepth);
-
-			if (abs(currentY) >= theHeight / 2) {
-				currentZ = 0;
-			}
-			else {
-				currentZ = sqrt(pow(R, 2) - pow(currentY, 2)) - R + theDepth;
-			}
-		}
-		else{
-
-			if (abs(currentY) >= theHeight / 2) {
-				currentZ = 0;
-			}
-			else {
-				currentZ = theDepth * sqrt(1 - pow(currentY / (theHeight / 2.), 2));
-			}
-		}
-
-		break;
-
-		case Gaussian:
-			//double sig_height_ratio = 0.14;
-			currentZ = theDepth * exp(-pow(currentY,2)/(2 * pow(gauss_sig_height_ratio * theHeight, 2)));
-
-			break;
-
-		case Cosine:
-			//double phase_y = M_PI * currentY / (theHeight / 2.);
-			currentZ = (theDepth / 2) * cos(M_PI * currentY / (theHeight / 2.)) + (theDepth / 2);
-
-			break;
-
-		case CosineRidge:
-			currentZ = theDepth * cos(M_PI * currentY / theHeight) ;
-			break;
-	}
-
-	return currentZ;
-
-}
-*/
 
 
-void updateProbe(double probeHeight, double probeDepth) {
-
-	double step_size = probeHeight / (double)(nr_points - 1);
-
-	double y;
-
-	for (int j = 0; j < nr_points; j++) {
-
-		y = -probeHeight / 2 + j * step_size;
-		probe_y_array[j] = y;
-		probe_x_array[j] = probeDepth * cos(M_PI * y / probeHeight);
-	}
-
-}
-
-void drawProbe(double dispDist, double probeDepth) {
-
-	glDisable(GL_TEXTURE_2D);
-	//glColor3f(1.0f, 0.0f, 0.0f);
-
-	glPushMatrix();
-	glLoadIdentity();
-	glTranslated(visualTarget_X, probe_location_offset, dispDist);
-
-	if (probe_drawSideView) {
-		double prev_x, prev_y, x, y;
-		x = probe_x_array[0];
-		y = probe_y_array[0];
-
-		glBegin(GL_LINES);
-		glLineWidth(1.f);
-		glColor3f(0.5f, 0.0f, 0.0f);
-		for (int i = 1; i < nr_points; i++) {
-
-			prev_x = x;
-			prev_y = y;
-
-			x = probe_x_array[i];
-			y = probe_y_array[i];
-
-
-			glVertex3d(prev_x, prev_y, 0);
-			glVertex3d(x, y, 0);
-		}
-
-		glEnd();
-	}
-
-	glBegin(GL_LINES);
-	glLineWidth(2.f);
-	glColor3f(0.8f, 0.0f, 0.0f);
-	glVertex3d(0, -40, 0);
-	glVertex3d(0, 40, 0);
-	glVertex3d(probeDepth, -40, 0);
-	glVertex3d(probeDepth, 40, 0);
-	glEnd();
-
-
-	glPopMatrix();
-}
 
 void initTrial()
 {
@@ -1511,19 +1502,12 @@ void initTrial()
 	trial_timer.start();
 	if (training) {
 		depth_test = rand() % depth_training_range + depth_training_min;
-
-		//shapeID = rand() % 2 + 2;
-		//current_shape = (shapeTypes)(shapeID);
-
 	}
 	else {
 		depth_test = trial.getCurrent()["testDepths"];
-		//normalizer_to_uv = trial.getCurrent()["textNormalizer"];
-
-		//shapeID =  trial.getCurrent()["testShape"];
-		//current_shape = (shapeTypes)(shapeID);
-
 	}
+
+
 	if (testing_texture_vs_disparity) {
 		jitter_z = (rand() % 101 - 50) / 10.0;
 		if (monocular_display) {
@@ -1540,28 +1524,22 @@ void initTrial()
 	}
 	// build the stimulus and choose texture
 	initStimulus(depth_test);
-	texnum = rand() % 50 + 1;
-	normalizer_to_uv = normalizer_to_uv_base + ((rand() % 13) - 6); // from -6 to 6
 
 	//probe init
 	probe_depth_init = 1. + rand() % (int)(1.2 * depth_training_range);
 	probe_depth = probe_depth_init;
-	updateProbe(stimulus_height, probe_depth);
+	updateProbe(stimulus_height, probe_depth, probe_verts);
 
+	if (stimulus_built) {
+		current_stage = trial_fixate;
 
-	current_stage = trial_fixate;
-
-	adjustUpNum = 0;
-	adjustDownNum = 0;
-	probe_drawSideView = true;
-	trial_timer.reset();
-	trial_timer.start();
-	ElapsedTime = 0;
-
-	// reset ElapsedTime variables
-
-	//trial_timer.start(); // start the timer when key is pressed
-
+		adjustUpNum = 0;
+		adjustDownNum = 0;
+		probe_drawSideView = true;
+		trial_timer.reset();
+		trial_timer.start();
+		ElapsedTime = 0;
+	}
 
 
 }
@@ -1588,9 +1566,69 @@ void onlineTrial() {
 
 }
 
+void writeResponse() {
+
+	if (testing_texture_vs_disparity) {
+		responseFile << fixed <<
+			subjectName << "\t" <<
+			training_cue << "\t" <<
+			interoculardistance << "\t" <<
+			blkNum << "\t" <<
+			trialNum << "\t" <<
+			display_distance_jittered << "\t" <<
+			visual_angle << "\t" <<
+			testing_texture_vs_disparity << "\t" <<
+			!testing_texture_vs_disparity << "\t" <<
+			left_eye_on << "\t" <<
+			right_eye_on << "\t" <<
+			stimulus_height << "\t" <<
+			stimulus_visiblewidth << "\t" <<
+			depth_test << "\t" <<
+			probe_depth_init << "\t" <<
+			probe_depth << "\t" <<
+			adjustUpNum << "\t" <<
+			adjustDownNum << "\t" <<
+			ElapsedTime << "\t" <<
+			texture_col_max << "\t" <<
+			0 << "\t" <<
+			0 << "\t" <<
+			(int)dot_number << "\t" <<
+			Tex_dot_radius << endl;
+
+	}
+	else {
+		responseFile << fixed <<
+			subjectName << "\t" <<
+			training_cue << "\t" <<
+			interoculardistance << "\t" <<
+			blkNum << "\t" <<
+			trialNum << "\t" <<
+			display_distance_jittered << "\t" <<
+			visual_angle << "\t" <<
+			testing_texture_vs_disparity << "\t" <<
+			!testing_texture_vs_disparity << "\t" <<
+			left_eye_on << "\t" <<
+			right_eye_on << "\t" <<
+			stimulus_height << "\t" <<
+			stimulus_visiblewidth << "\t" <<
+			depth_test << "\t" <<
+			probe_depth_init << "\t" <<
+			probe_depth << "\t" <<
+			adjustUpNum << "\t" <<
+			adjustDownNum << "\t" <<
+			ElapsedTime << "\t" <<
+			bgSurface_color << "\t" <<
+			(int)dot_number << "\t" <<
+			visAngle_dot << "\t" <<
+			0 << "\t" <<
+			0 << endl;
+	}
+
+}
+
 void advanceTrial()
 {
-	//subjName\tIOD\tblockN\ttrialN\tdisplayDistance\tvisualAngle\tclyHorizontal\ttexnum\ttextNomralizer\ttestDepth\tprobeStart\tprobeDepth\ttime
+
 	if (training) {
 		if (trialNum < trainNum_cap) {
 			beepOk(6);
@@ -1606,32 +1644,8 @@ void advanceTrial()
 
 	}
 	else {
-		//subjName\tIOD\tblockN\ttrialN\tdisplayDistance\tvisualAngle\tshapeID\ttexnum\ttextNomralizer\ttestDepth\tprobeDepthInit\tprobeDepth\tRT
-		responseFile << fixed <<
-			subjectName << "\t" <<
-			interoculardistance << "\t" <<
-			blkNum << "\t" <<
-			trialNum << "\t" <<
-			display_distance << "\t" <<
-			visual_angle << "\t" <<
-			stimulus_height << "\t" <<
-			(int)current_shape << "\t" <<
-			testing_texture_vs_disparity << "\t" <<
-			!testing_texture_vs_disparity << "\t" <<
-			left_eye_on << "\t" <<
-			right_eye_on << "\t" <<
-			texnum << "\t" <<
-			normalizer_to_uv << "\t" <<
-			depth_test << "\t" <<
-			probe_depth_init << "\t" <<
-			probe_depth << "\t" <<
-			dot_number << "\t" <<
-			visAngle_dot << "\t" <<
-			dispSurf_color_R << "\t" <<
-			dot_jitter_max_scale << "\t" <<
-			ElapsedTime << "\t" <<
-			adjustUpNum << "\t" <<
-			adjustDownNum << endl;
+
+		writeResponse();
 
 		if (!trial.isEmpty()) {
 
@@ -1690,18 +1704,8 @@ void handleKeypress(unsigned char key, int x, int y)
 		visibleInfo = !visibleInfo;
 		break;
 
-	case 'o':
-		panel_state = panelStates((panel_state + 1) % 3);
-		break;
 
 
-	case '0':
-		if (current_stage == stimulus_preview) {
-			testing_texture_vs_disparity = !testing_texture_vs_disparity;
-			setViewingVar();
-			initStimulus(depth_test);
-		}
-		break;
 
 	case '1':
 		switch (current_stage) {
@@ -1718,7 +1722,7 @@ void handleKeypress(unsigned char key, int x, int y)
 			if (probe_depth > 1)
 				probe_depth = probe_depth - 1;
 
-			updateProbe(stimulus_height, probe_depth);
+			updateProbe(stimulus_height, probe_depth, probe_verts);
 			adjustDownNum++;
 			break;
 
@@ -1726,7 +1730,7 @@ void handleKeypress(unsigned char key, int x, int y)
 			if (probe_depth > 1)
 				probe_depth = probe_depth - 1;
 
-			updateProbe(stimulus_height, probe_depth);
+			updateProbe(stimulus_height, probe_depth, probe_verts);
 			adjustDownNum++;
 			current_stage = trial_respond;
 			probe_drawSideView = true;
@@ -1746,13 +1750,13 @@ void handleKeypress(unsigned char key, int x, int y)
 		case trial_respond:
 
 			probe_depth = probe_depth + 1;
-			updateProbe(stimulus_height, probe_depth);
+			updateProbe(stimulus_height, probe_depth, probe_verts);
 			adjustUpNum++;
 			break;
 
 		case trial_confirm:
 			probe_depth = probe_depth + 1;
-			updateProbe(stimulus_height, probe_depth);
+			updateProbe(stimulus_height, probe_depth, probe_verts);
 			adjustUpNum++;
 			current_stage = trial_respond;
 			probe_drawSideView = true;
@@ -1819,24 +1823,6 @@ void handleKeypress(unsigned char key, int x, int y)
 			}
 		}
 		break;
-		/////////////////////////
-		// adjusting disparity //
-		/////////////////////////
-
-
-	///////////////////////////////////////////////
-	// key presses for adjusting stimulus preview
-
-	case 'M':
-	case 'm':
-		if (current_stage == stimulus_preview) {
-			//jitter_z = jitter_z - 2;
-			//display_distance_jittered = display_distance + jitter_z;
-			current_shape = shapeTypes((current_shape + 1) % 4);
-			initStimulus(depth_test);
-		}
-		break;
-
 
 	}
 
@@ -1961,26 +1947,7 @@ void online_apparatus_alignment()
 
 }
 
-int LoadGLTextures()  // Load PNG And Convert To Textures
-{
 
-	for (int i = 1; i <= 50; i++) {
-		std::stringstream ss;
-		ss << i;
-
-		string texturePath = "C:/cncsvision/experimentsbrown/ShapeConstancy/textures/polkadots/0/polkadots" + ss.str() + ".png";
-		loaded_textures[i] = SOIL_load_OGL_texture
-		(
-			texturePath.c_str(),
-			SOIL_LOAD_AUTO,
-			SOIL_CREATE_NEW_ID,
-			SOIL_FLAG_MULTIPLY_ALPHA
-		);
-	}
-
-
-	return true; // Return Success
-}
 
 // this is run at compilation because it's titled 'main'
 int main(int argc, char* argv[])
@@ -1992,32 +1959,9 @@ int main(int argc, char* argv[])
 	glutInit(&argc, argv);
 
 	initStreams(); // streams as in files for writing data
-	if (testing_texture_vs_disparity) {
-		//texture
-		if (monocular_display) {
-			glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_MULTISAMPLE);
-		}
-		else {
-			glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_STEREO | GLUT_MULTISAMPLE);
-		}
-	}
-	else {
-		// disparity
-		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_STEREO);
-	}
-
-	//glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_STEREO | GLUT_MULTISAMPLE);
-
-
 	initRendering(); // initializes the openGL parameters needed for creating the stimuli
 	initVariables();
-	/*
-	if(testing_texture_vs_disparity && monocular_display){
-		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);// | GLUT_MULTISAMPLE);
-	}else{
-		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_STEREO); //| GLUT_MULTISAMPLE);
-	}
-*/
+
 	glutGameModeString("1024x768@85"); //resolution  
 	glutEnterGameMode();
 	glutFullScreen();
@@ -2026,9 +1970,6 @@ int main(int argc, char* argv[])
 	initOptotrak();
 	initMotors();
 
-	LoadGLTextures();
-
-	setViewingVar();
 	initStimulus(depth_test);
 
 	initProjectionScreen(display_distance);
@@ -2051,6 +1992,5 @@ int main(int argc, char* argv[])
 
 	glutMainLoop();
 
-	//cleanup();
 	return 0;
 }
