@@ -78,7 +78,7 @@ CoordinatesExtractor headEyeCoords;
 /***** CALIBRATION FILE *****/
 #include "Calibration_017B.h"
 static const Vector3d center(0, 0, focalDistance);
-double mirrorAlignment = 0.0, screenAlignmentY = 0.0, screenAlignmentZ = 0.0;
+double mirrorAlignment = 999.0, screenAlignmentY = 999.0, screenAlignmentZ = 999.0;
 
 /********** EYES AND MARKERS **********************/
 Vector3d eyeLeft, eyeRight, eyeMiddle;
@@ -88,48 +88,46 @@ int screen1 = 19, screen2 = 20, screen3 = 21;
 int mirror1 = 6, mirror2 = 22;
 
 
-//////////////////////////////// usually no change is needed until this point //////////////////////
-
-
-/*************************** TRIAL, INPUT AND OUTPUT ****************************/
+/*************************** INPUT AND OUTPUT ****************************/
+string subjectName;
 // experiment directory
 string experiment_directory = "C:/Users/labdomin/Documents/data/ailin/summer23-ailin-NewRemap-Haptic/";
-BalanceFactor<double> trial; //if using costant stimuli
-
-ParametersLoader parameters_subj;
-ParametersLoader parameters;
 
 // paramters file directory and name
-
-string parametersFileName_subj = experiment_directory + "ParametersFiles/Haptic_Subj.txt";
+ParametersLoader parameters_subj;
+ParametersLoader parameters;
+string parametersFileName_subj = experiment_directory + "parameters_summer23-ailin-NewRemap-Haptic-MASTER.txt";
 string parametersFileName = experiment_directory + "ParametersFiles/parameters_Haptic_probe.txt";
-
 // response file
 ofstream responseFile;
-string responseFile_headers = "subjName\ttrainCue\tIOD\tblockN\ttrialN\tdisplayDistance\tvisualAngle\ttestingTexture\ttestingDisparity\tlefEyeView\trightEyeView\tshapeHeight\tshapeWidth\tshapeDepth\tprobeDepthInit\tprobeDepth\tadjustUpNum\tadjustDnNum\tRT\tSurf_color\tnum_rdmDots\tvisAg_rdmDots\tnum_texDots\tradius_texDots";
-
-string subjectName;
+string responseFile_headers = "subjName\treinforceTexture\tIOD\tblockN\ttrialN\tdisplayDistance\ttestingTexture\ttestingDisparity\tlefEyeView\trightEyeView\tshapeDepth\tprobeDepthInit\tprobeDepth\tadjustUpNum\tadjustDnNum\tRT\tSurf_color\tnum_rdmDots\tvisAg_rdmDots\tnum_texDots\tradius_texDots";
 
 
-/**********	TRIALS **************/
-int training_cue;
+/********** TRIAL SPECIFIC PARAMETERS ***************/
+BalanceFactor<double> trial; //if using costant stimuli
+bool test_texture_first = false;
+
+int targetCueID; // 0 for texture; 1 for dispairty
+bool reinforce_texture_disparity;
+
 int sessionNum = 0;
-bool sessionOrder_texture_first = false;
 int totalBlkNum = 2;
 int blkNum = 1;
-int trialNum = 0;
-int repetition = 2; // each block
-int totalTrNum = totalBlkNum * repetition * 5; // two blocks * repetition * stimuli num
-double percentComplete = 0;
 
-int trainNum_cap = 8;
+int repetition = 2;
+int totalTrNum = totalBlkNum * repetition * 5; // two blocks * repetition * stimuli num
+int trialNum = 0;
+double percentComplete = 0;
+int trainNum_cap = 4;
+
 int adjustUpNum = 0, adjustDownNum = 0;
 
 /********** STIMULUS SHAPE ***************/
-// stimulus shape
+// display
 double display_distance;
-double visualTarget_X = 21;
+double visualTarget_X = 19.6;
 double visual_angle = 7.4; // stim diangonal size
+
 double jitter_z = 0;
 double display_distance_jittered = display_distance + jitter_z;
 double dist_toEye;
@@ -141,10 +139,13 @@ double stimulus_visiblewidth = 70; //ratio_visiblewidth_height * stimulus_height
 double ratio_width_height = 1.36;//1.3;
 double ratio_visiblewidth_height = 1.15;//1.1;
 
+// depths
 double depth_test = 32;
-double depth_inc = 2;
 double depth_training_min = 20; // set in the subject file
 int depth_training_range = 25; // set in the subject file
+double depth_inc = 2;
+
+
 
 /********** STIMULUS VERTICES ***************/
 struct Vec2 {
@@ -194,21 +195,7 @@ VerticesData my_verts;
 ContourData my_contour_data;
 float dot_number;
 
-/********** RAMDOM DOTS SURF ***************/
-// dot distribution
-int dot_num_per_col = 18;
-double dot_jitter_max_scale = 1.30;
 
-// for ot size
-double visAngle_dot = 0.13;
-double ratio_dotSize_distance = tan(DEG2RAD * visAngle_dot / 2.0);
-int dot_sides = 16; // Bigger dot: 24; smaller dot: 8
-
-// for random dot surface
-float bgSurface_color = 0.8;
-int nr_points_height_bgSurface = 76;
-
-std::vector<Vector3d> dot_container;
 
 /********** TEXTURE SURF ***************/
 int nr_curve_map = 10001;
@@ -242,8 +229,24 @@ float max_intensity = 1.0;
 float light_amb = 0.3;
 float light_dif = 0.5;
 float lightDir_z = 0.5;
-double light_depthMin = 26;
+double light_depthMin = 24;
 double light_depthMax = 40;
+
+/********** RAMDOM DOTS SURF ***************/
+// dot distribution
+int dot_num_per_col = 18;
+double dot_jitter_max_scale = 1.30;
+
+// for ot size
+double visAngle_dot = 0.13;
+double ratio_dotSize_distance = tan(DEG2RAD * visAngle_dot / 2.0);
+int dot_sides = 16; // Bigger dot: 24; smaller dot: 8
+
+// for random dot surface
+float bgSurface_color = 0.6;
+int nr_points_height_bgSurface = 76;
+
+std::vector<Vector3d> dot_container;
 
 
 /********** PROBE ***************/
@@ -253,15 +256,24 @@ double probe_depth_init = 30; // starting value, should be randomized
 double probe_height = 100; // the height is the length when the probe is a straight line
 double probe_location_offset = -80;
 double probe_jitter_z = 0;
-int nr_points_probe = 101;
 vector<Vec2> probe_verts;
+float probe_color = 0.6;
+
+enum probeLineTypes{solid, dashed, dotted};
+probeLineTypes use_line_type = solid;
+// dash line
+int probe_dashs = 11;
+int subsegs_per_probedash = 4;
+// dotted line
+int probe_dots = 21;
+float probe_dot_ptsize = 2;
 
 /********** STATE VARIABLES ***************/
 enum Stages { stimulus_preview, prep_trial, trial_fixate, trial_view, trial_respond, trial_confirm, trial_error, break_time, exp_completed };
 Stages current_stage = stimulus_preview; // if just want to look at the stimuli, use the constant present stage
 
 //state bool 
-bool testing_texture_vs_disparity = true;
+bool testing_texture_vs_disparity = true; // for probe tests
 bool monocular_display = true;
 bool left_eye_on = true;
 bool right_eye_on = true;
@@ -281,7 +293,7 @@ double viewTime = 800;
 double progressBarTime = 1500;
 double responseTime = 8000;
 
-/********** OPTIONS ***************/
+/********** CONTROL OPTIONS ***************/
 bool resetScreen_betweenRuns = false;
 
 /*********** for DEBUGGING **********/
@@ -293,7 +305,7 @@ void initMotors();
 void initRendering();
 void initVariables();
 void initStreams();
-void initBlock();
+
 void setViewingVar();
 void handleResize(int w, int h);
 void initProjectionScreen(double _focalDist, const Affine3d& _transformation = Affine3d::Identity(), bool synchronous = true);
@@ -302,13 +314,15 @@ void online_apparatus_alignment();
 void cleanup();
 void beepOk(int tone);
 
+void initBlock();
 void initTrial();
 void onlineTrial();
 void advanceTrial();
 
-void initStimulus(double stimulusDepth);
 void drawStimulus();
 void drawInfo();
+void initStimulus(double stimulusDepth);
+
 
 void generateRandomDots(double shapeWidth, double shapeHeight, double shapeDepth, int dotNumPerRow, int dotNumPerCol, double dotJitterMax_Scale, vector<Vector3d>& dotContainer);
 void buildContour_wavy(double ContourWidth, double shapeHeight, double shapeDepth, ContourData& new_contours_vert);
@@ -334,3 +348,4 @@ float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth
 void updateProbe(double probeHeight, double probeDepth, vector<Vec2>& probeVerts);
 void drawProbe(double dispDist, double probeDepth, const vector<Vec2>& probeVerts);
 
+void makeParsFileCopy(string filename_original, string filename_copy);

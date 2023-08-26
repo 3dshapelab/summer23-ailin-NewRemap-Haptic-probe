@@ -13,16 +13,71 @@ double getZ(double shapeHeight, double shapeDepth, double Y) {
 void updateProbe(double probeHeight, double probeDepth, vector<Vec2>& probeVerts) {
 
 	probeVerts.clear();
+	double step_size;
+	
+	switch (use_line_type) {
+	case solid:
+	{
+		// solid line
+		int nr_points_probe = 101;
+		step_size = probeHeight / (double)(nr_points_probe - 1);
+		for (int j = 0; j < nr_points_probe; j++) {
+			float y = -probeHeight / 2 + j * step_size;
+			float x = getZ(probeHeight, probeDepth, y);
+			probeVerts.push_back(Vec2{ x,y });
 
-	double step_size = probeHeight / (double)(nr_points_probe - 1);
-
-	for (int j = 0; j < nr_points_probe; j++) {
-
-		float y = -probeHeight / 2 + j * step_size;
-		float x = getZ(probeHeight, probeDepth, y);
-		probeVerts.push_back(Vec2{ x,y });
-
+		}
 	}
+		break;
+
+
+	case dashed:
+	{
+
+		// dashed line
+		int dash_segs = 2 * probe_dashs - 1;
+		step_size = probeHeight / (double)(dash_segs * subsegs_per_probedash);
+		int stp = 0;
+
+		for (int d = 0; d < dash_segs; d++) {
+			if (d % 2 == 0) {
+				for (int i = 0; i < (subsegs_per_probedash + 1); i++) {
+					float y = -probeHeight / 2 + stp * step_size;
+					float x = getZ(probeHeight, probeDepth, y);
+					probeVerts.push_back(Vec2{ x,y });
+					stp++;
+				}
+			}
+			else {
+				stp = stp + (subsegs_per_probedash - 1);
+			}
+
+		}
+	}
+		break;
+
+
+
+	case dotted:
+	{
+		// dotted line
+		step_size = probeHeight / (double)(probe_dots + 1);
+		for (int d = 0; d < probe_dots; d++) {
+			float y = -probeHeight / 2 + (d + 1) * step_size;
+			float x = getZ(probeHeight, probeDepth, y);
+			probeVerts.push_back(Vec2{ x,y });
+		}
+	}
+		break;
+	}
+
+
+	
+
+
+
+
+
 
 }
 
@@ -33,28 +88,74 @@ void drawProbe(double dispDist, double probeDepth, const vector<Vec2>& probeVert
 
 	glPushMatrix();
 	glLoadIdentity();
-	glTranslated(0, probe_location_offset, dispDist);
+	glTranslated(visualTarget_X, probe_location_offset, dispDist);
 
 	if (probe_drawSideView) {
 
-		glBegin(GL_LINES);
-		glLineWidth(1.f);
-		glColor3f(0.5f, 0.0f, 0.0f);
-		for (int i = 0; i < probeVerts.size() - 1; i++) {
-			glVertex3d(probeVerts[i].x, probeVerts[i].y, 0);
-			glVertex3d(probeVerts[i + 1].x, probeVerts[i + 1].y, 0);
+		switch (use_line_type) {
+		case solid:
+		{	
+			// solid line
+			glLineWidth(1.5f);
+			glBegin(GL_LINES);
+			glColor3f(0.5f, 0.0f, 0.0f);
+			for (int i = 0; i < probeVerts.size() - 1; i++) {
+				glVertex3d(probeVerts[i].x, probeVerts[i].y, 0);
+				glVertex3d(probeVerts[i + 1].x, probeVerts[i + 1].y, 0);
+			}
+			glEnd();
+		}
+			break;
+		case dashed:
+		{
+			// dashed line
+			for (int i = 0; i < probe_dashs; i++) {
+				glBegin(GL_LINE_STRIP);
+				glLineWidth(1.f);
+				glColor3f(0.5f, 0.0f, 0.0f);
+
+				for (int j = 0; j < subsegs_per_probedash + 1; j++) {
+					int v = i * (subsegs_per_probedash + 1) + j;
+					glVertex3d(probeVerts[v].x, probeVerts[v].y, 0);
+					//glVertex3d(probeVerts[i + 1].x, probeVerts[i + 1].y, 0);
+				}
+				glEnd();
+			}
+		}
+			break;
+		case dotted:
+		{
+			// dotted line
+			glColor3f(0.7f, 0.0f, 0.0f);
+
+			glPointSize(probe_dot_ptsize);
+			glBegin(GL_POINTS);
+
+			glColor3f(0.8f, 0.0f, 0.0f);
+			for (int i = 0; i < int(probeVerts.size()); i++) {
+				glVertex3d(probeVerts[i].x, probeVerts[i].y, 0);
+			}
+			glEnd();
+		}
+			break;
+
+
 		}
 
-		glEnd();
+
+
+
 	}
 
+
+
+	glLineWidth(2.5f);
 	glBegin(GL_LINES);
-	glLineWidth(2.f);
-	glColor3f(0.8f, 0.0f, 0.0f);
-	glVertex3d(0, -40, 0);
-	glVertex3d(0, 40, 0);
-	glVertex3d(probeDepth, -40, 0);
-	glVertex3d(probeDepth, 40, 0);
+	glColor3f(probe_color, 0.0f, 0.0f);
+	glVertex3d(0, -(stimulus_height/2 + 5), 0);
+	glVertex3d(0, (stimulus_height / 2 + 5), 0);
+	glVertex3d(probeDepth, -(stimulus_height / 2 + 5), 0);
+	glVertex3d(probeDepth, (stimulus_height / 2 + 5), 0);
 	glEnd();
 
 
@@ -382,7 +483,7 @@ void drawRandomDotSurface(double distShapeToEye, const VerticesData& vertices_da
 	glPushMatrix();
 
 	glLoadIdentity();
-	glTranslated(0, 0, -distShapeToEye);
+	glTranslated(visualTarget_X, 0, -distShapeToEye);
 
 	// activate and specify pointer to vertex array
 	glEnableClientState(GL_VERTEX_ARRAY);
@@ -409,7 +510,12 @@ double getTg(double shapeHeight, double shapeDepth, double Y) {
 
 float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth_flat, double Depth_deep) {
 	float newDiff = ambInt;
-	newDiff = newDiff + (textDepth - Depth_flat) / (Depth_deep - Depth_flat) * (maxInt - 2 * ambInt);
+
+	if (textDepth > Depth_flat)
+		newDiff = newDiff + (textDepth - Depth_flat) / (Depth_deep - Depth_flat) * (maxInt - 2 * ambInt);
+	else
+		newDiff = newDiff + (textDepth - Depth_flat) / (Depth_deep - textDepth) * (maxInt - 2 * ambInt);
+
 	return newDiff;
 }
 
@@ -895,7 +1001,7 @@ bool buildTextureSurface(double shapeWidth, double shapeHeight, double dispDepth
 	bool texdots_ready = generateTexture(shapeWidth, lengthFactor_TM * l_text, Tex_dot_density, Tex_dot_radius, Tex_dot_separation_ratio, TexDot_Lat_nr, TexDot_Lat_jitter, Tex_Dots_text);
 
 	if (!texdots_ready) {
-		current_stage = trial_error;
+
 		return false;
 	}
 
@@ -929,7 +1035,7 @@ void drawTextureSurface(double distShapeToEye, const VerticesData& vertices_data
 
 	glPushMatrix();
 	glLoadIdentity();
-	glTranslated(0, 0, -distShapeToEye);
+	glTranslated(visualTarget_X, 0, -distShapeToEye);
 
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
@@ -963,19 +1069,16 @@ void initStimulus(double stimulusDepth) {
 
 	display_distance_jittered = display_distance + jitter_z;
 	dist_toEye = -(display_distance_jittered - stimulusDepth);
-	stimulus_height = tan((DEG2RAD * visual_angle) / 2) * 2 * dist_toEye;
-	stimulus_width = ratio_width_height * stimulus_height;
-	stimulus_visiblewidth = ratio_visiblewidth_height * stimulus_height;
 
 	if (testing_texture_vs_disparity) {
 		stimulus_built = buildTextureSurface(stimulus_width, stimulus_height, stimulusDepth, stimulusDepth, dist_toEye, stimulus_visiblewidth, my_verts, my_contour_data);
 		light_dif = adjustDiffLight(stimulusDepth, max_intensity, light_amb, light_depthMin, light_depthMax);
+		
 	}
 	else {
 		buildRandomDotSurface(stimulus_width, stimulus_height, stimulusDepth, stimulus_visiblewidth, my_verts, dot_container, my_contour_data);
 		stimulus_built = true;
 	}
-
 	dot_number = ratio_visiblewidth_height / ratio_width_height * dot_number;
 }
 
@@ -1103,6 +1206,25 @@ void initRendering()
 	glLineWidth(1.5);
 }
 
+
+void makeParsFileCopy(string filename_original, string filename_copy) {
+
+	ifstream ini_file{ filename_original }; // This is the original file
+	ofstream out_file{ filename_copy };
+	string line;
+	if (ini_file && out_file) {
+		while (getline(ini_file, line)) {
+			out_file << line << "\n";
+		}
+	}
+	else {
+		printf("Cannot read File");
+	}
+	ini_file.close();
+	out_file.close();
+}
+
+
 void initStreams()
 {
 	// Initialize the parameter file starting from the file parameters.txt, if the file does not exist, it tells you
@@ -1114,7 +1236,7 @@ void initStreams()
 	interoculardistance = str2num<double>(parameters_subj.find("IOD"));
 	display_distance = str2num<double>(parameters_subj.find("dispDepth"));
 
-	training_cue = str2num<int>(parameters_subj.find("TRAINING_Cue"));
+	targetCueID = str2num<int>(parameters_subj.find("Train_Cue"));
 
 	string session = parameters_subj.find("PROBE_Session");
 	sessionNum = str2num<int>(session);
@@ -1132,10 +1254,8 @@ void initStreams()
 		shutdown();
 	}
 
-	int odd_sess_text = str2num<int>(parameters_subj.find("PROBE_Order_OddSess_Texture"));
 
-	if (odd_sess_text == 1) {
-		sessionOrder_texture_first = true;
+	if (test_texture_first) {
 
 		if (sessionNum % 2 > 0) { // odd session
 			testing_texture_vs_disparity = true;
@@ -1147,8 +1267,7 @@ void initStreams()
 
 	}
 	else {
-		sessionOrder_texture_first = false;
-
+	
 		if (sessionNum % 2 > 0) { // odd session
 			testing_texture_vs_disparity = false;
 			monocular_display = false;
@@ -1159,13 +1278,24 @@ void initStreams()
 
 	}
 
-	ifstream parametersFile;
+	// make a copy of the pars of the staircase
+	if (sessionNum == 1) {
+		auto t = std::time(nullptr);
+		auto tm = *std::localtime(&t);
+		std::ostringstream oss;
+		oss << std::put_time(&tm, "%m%d%Y");
+		string parametersFileName_copy = dirName + "/" + subjectName + "_ParsCopy_Probe_" + oss.str() + ".txt";
 
+		makeParsFileCopy(parametersFileName, parametersFileName_copy);
+	}
+
+
+	ifstream parametersFile;
 	parametersFile.open(parametersFileName.c_str());
 	parameters.loadParameterFile(parametersFile);
+	visual_angle = str2num<double>(parameters.find("visualAng"));
 
 	string responseFileName = dirName + "/" + subjectName + "_s" + session + "_Probe.txt";
-
 	responseFile.open(responseFileName.c_str());
 	responseFile << fixed << responseFile_headers << endl;
 
@@ -1177,8 +1307,8 @@ void setViewingVar() {
 
 	if (testing_texture_vs_disparity) {
 		// if testing texture, then both eys are set to be eyeMiddle
-		eyeRight = Vector3d(visualTarget_X, 0, 0);
-		eyeLeft = Vector3d(visualTarget_X, 0, 0);
+		eyeRight = Vector3d(visualTarget_X + interoculardistance / 2, 0, 0);
+		eyeLeft = Vector3d(visualTarget_X - interoculardistance / 2, 0, 0);
 		eyeMiddle = Vector3d(visualTarget_X, 0, 0);
 
 		if (monocular_display) {
@@ -1203,8 +1333,10 @@ void initVariables()
 {
 	blkNum = (sessionNum - 1) * 2 + 1;
 
-	//stimulus_height = tan((DEG2RAD * visual_angle) / 2) * 2 * (abs(display_distance));
-	//stimulus_width = ratio_width_height * stimulus_height;
+	double depth_default = 30;
+	stimulus_height = tan((DEG2RAD * visual_angle) / 2) * 2 * (abs(display_distance - depth_default));
+	stimulus_visiblewidth = ratio_visiblewidth_height * stimulus_height;
+	stimulus_width = ratio_width_height * stimulus_height;
 
 	if (testing_texture_vs_disparity && monocular_display) {
 		left_eye_on = rand() % 2;
@@ -1246,7 +1378,7 @@ void drawGLScene()
 	else {
 
 		// Draw left eye view
-		glDrawBuffer(GL_BACK_RIGHT);
+		glDrawBuffer(GL_BACK_LEFT);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		cam.setEye(eyeLeft);
@@ -1256,7 +1388,7 @@ void drawGLScene()
 
 
 		// Draw right eye view
-		glDrawBuffer(GL_BACK_LEFT);
+		glDrawBuffer(GL_BACK_RIGHT);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		cam.setEye(eyeRight);
@@ -1355,13 +1487,13 @@ void drawInfo()
 			//text.draw("# depth: " + stringify<double>(depth_test));
 			//text.draw("# left eye on: " + stringify<bool>(left_eye_on));
 			//text.draw("# rt eye on: " + stringify<bool>(right_eye_on));	
-			text.draw("# testing_texture_vs_disparity : " + stringify<bool>(testing_texture_vs_disparity));
+			//text.draw("# testing_texture_vs_disparity : " + stringify<bool>(testing_texture_vs_disparity));
 
 			// check if mirror is calibrated				
-			text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment));
-			text.draw("# Mirror1 Marker " + stringify<int>(mirror1) + " : x = " + stringify<double>(markers[mirror1].p.x()) + " y = " + stringify<double>(markers[mirror1].p.y()) + " z = " + stringify<double>(markers[mirror1].p.z()));
-			text.draw("# Mirror2 Marker " + stringify<int>(mirror2) + " : x = " + stringify<double>(markers[mirror2].p.x()) + " y = " + stringify<double>(markers[mirror2].p.y()) + " z = " + stringify<double>(markers[mirror2].p.z()));
-
+			text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment)); 
+			text.draw("Mirror1 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror1].p.transpose()));
+			text.draw("Mirror2 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror2].p.transpose()));
+		
 
 			if (left_eye_on)
 				text.draw("# L: OOOOO");
@@ -1384,6 +1516,7 @@ void drawInfo()
 		case trial_respond:
 
 			glColor3fv(glRed);
+			
 			text.draw("# Name: " + subjectName);
 			text.draw("# IOD: " + stringify<double>(interoculardistance));
 			text.draw("# depth: " + stringify<double>(depth_test));
@@ -1392,8 +1525,12 @@ void drawInfo()
 			text.draw("# current stage: " + stringify<int>(current_stage));
 
 			// check if mirror is calibrated
-			if (abs(mirrorAlignment - 45.0) > 0.2)
+			if (abs(mirrorAlignment - 45.0) > 0.2) {
 				text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment));
+				text.draw("Mirror1 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror1].p.transpose()));
+				text.draw("Mirror2 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror2].p.transpose()));
+			}
+
 			break;
 
 		case break_time:
@@ -1403,9 +1540,13 @@ void drawInfo()
 			}
 			else {
 				text.draw("Break time! Press + to continue");
-				if (abs(mirrorAlignment - 45.0) > 0.2)
+				if (abs(mirrorAlignment - 45.0) > 0.2) {
 					text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment));
+					text.draw("Mirror1 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror1].p.transpose()));
+					text.draw("Mirror2 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror2].p.transpose()));
+				}
 			}
+
 
 			if (left_eye_on)
 				text.draw("# L: OOOOO");
@@ -1540,6 +1681,10 @@ void initTrial()
 		trial_timer.start();
 		ElapsedTime = 0;
 	}
+	else {
+		beepOk(24);
+		current_stage = trial_error;
+	}
 
 
 }
@@ -1571,18 +1716,15 @@ void writeResponse() {
 	if (testing_texture_vs_disparity) {
 		responseFile << fixed <<
 			subjectName << "\t" <<
-			training_cue << "\t" <<
+			(1-targetCueID) << "\t" <<
 			interoculardistance << "\t" <<
 			blkNum << "\t" <<
 			trialNum << "\t" <<
 			display_distance_jittered << "\t" <<
-			visual_angle << "\t" <<
 			testing_texture_vs_disparity << "\t" <<
 			!testing_texture_vs_disparity << "\t" <<
 			left_eye_on << "\t" <<
 			right_eye_on << "\t" <<
-			stimulus_height << "\t" <<
-			stimulus_visiblewidth << "\t" <<
 			depth_test << "\t" <<
 			probe_depth_init << "\t" <<
 			probe_depth << "\t" <<
@@ -1599,18 +1741,15 @@ void writeResponse() {
 	else {
 		responseFile << fixed <<
 			subjectName << "\t" <<
-			training_cue << "\t" <<
+			(1 - targetCueID) << "\t" <<
 			interoculardistance << "\t" <<
 			blkNum << "\t" <<
 			trialNum << "\t" <<
 			display_distance_jittered << "\t" <<
-			visual_angle << "\t" <<
 			testing_texture_vs_disparity << "\t" <<
 			!testing_texture_vs_disparity << "\t" <<
 			left_eye_on << "\t" <<
 			right_eye_on << "\t" <<
-			stimulus_height << "\t" <<
-			stimulus_visiblewidth << "\t" <<
 			depth_test << "\t" <<
 			probe_depth_init << "\t" <<
 			probe_depth << "\t" <<
@@ -1824,7 +1963,36 @@ void handleKeypress(unsigned char key, int x, int y)
 		}
 		break;
 
+	case '32': //space bar
+	{
+		if (current_stage == trial_error) {
+			initTrial();
+		}
 	}
+	break;
+
+	
+
+
+
+
+
+
+		case '4':
+			probe_dashs = probe_dashs - 2;
+			updateProbe(stimulus_height, probe_depth, probe_verts);
+			break;
+
+
+		case '5':
+			probe_dashs = probe_dashs + 2;
+			updateProbe(stimulus_height, probe_depth, probe_verts);
+			break;
+
+
+
+
+}
 
 }
 
@@ -1884,6 +2052,11 @@ void beepOk(int tone)
 
 	case 18: // light click
 		PlaySound((LPCSTR)"C:\\cncsvision\\data\\beep\\beep-click3MS.wav",
+			NULL, SND_FILENAME | SND_ASYNC);
+		break;
+
+	case 24: // help
+		PlaySound((LPCSTR)"C:\\cncsvision\\data\\beep\\spoken-help.wav",
 			NULL, SND_FILENAME | SND_ASYNC);
 		break;
 
