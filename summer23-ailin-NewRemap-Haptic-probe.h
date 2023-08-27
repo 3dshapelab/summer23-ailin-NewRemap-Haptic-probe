@@ -125,7 +125,7 @@ int adjustUpNum = 0, adjustDownNum = 0;
 /********** STIMULUS SHAPE ***************/
 // display
 double display_distance;
-double visualTarget_X = 19.6;
+double visualTarget_X = 0;// 19.6;
 double visual_angle = 7.4; // stim diangonal size
 
 double jitter_z = 0;
