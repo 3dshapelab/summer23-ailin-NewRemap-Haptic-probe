@@ -100,7 +100,7 @@ string parametersFileName_subj = experiment_directory + "parameters_summer23-ail
 string parametersFileName = experiment_directory + "ParametersFiles/parameters_Haptic_probe.txt";
 // response file
 ofstream responseFile;
-string responseFile_headers = "subjName\treinforceTexture\tIOD\tblockN\ttrialN\tdisplayDistance\ttestingTexture\ttestingDisparity\tlefEyeView\trightEyeView\tshapeDepth\tprobeDepthInit\tprobeDepth\tadjustUpNum\tadjustDnNum\tRT\tSurf_color\tnum_rdmDots\tvisAg_rdmDots\tnum_texDots\tradius_texDots";
+string responseFile_headers = "subjName\treinforceTexture\tIOD\tsessionN\tblockN\ttrialN\tdisplayDistance\ttestingTexture\ttestingDisparity\tlefEyeView\trightEyeView\tshapeDepth\tprobeDepthInit\tprobeDepth\tadjustUpNum\tadjustDnNum\tRT\tSurf_color\tnum_rdmDots\tvisAg_rdmDots\tnum_texDots\tradius_texDots";
 
 
 /********** TRIAL SPECIFIC PARAMETERS ***************/
@@ -115,7 +115,7 @@ int totalBlkNum = 2;
 int blkNum = 1;
 
 int repetition = 2;
-int totalTrNum = totalBlkNum * repetition * 5; // two blocks * repetition * stimuli num
+int totalTrNum = totalBlkNum * repetition * 4; // two blocks * repetition * stimuli num
 int trialNum = 0;
 double percentComplete = 0;
 int trainNum_cap = 4;
@@ -226,6 +226,7 @@ double R_intersect_factor = 2 / (1 + drop_off_rate);
 
 /********** LIGHT SHADING ***************/
 float max_intensity = 1.0;
+float min_intensity = 0.75;
 float light_amb = 0.3;
 float light_dif = 0.5;
 float lightDir_z = 0.5;
@@ -243,7 +244,7 @@ double ratio_dotSize_distance = tan(DEG2RAD * visAngle_dot / 2.0);
 int dot_sides = 16; // Bigger dot: 24; smaller dot: 8
 
 // for random dot surface
-float bgSurface_color = 0.6;
+float bgSurface_color = 0.8;
 int nr_points_height_bgSurface = 76;
 
 std::vector<Vector3d> dot_container;
@@ -343,8 +344,8 @@ double SolveForZ_projected(double theHeight, double newDepth, double l, double y
 void scanCurve(double shapeHeight, double shapeDepth, CurveYLMap& output_curve_ylmap);
 void projectCurve(const CurveYLMap& curve_map_proj, double distShapeToEye, const CurvePtsData& origin_curve, CurvePtsData& output_curve_proj);
 Vector3d projectPoint(double shapeHeight, double newDepth, double distShapeToEye, Vector3d fromPoint);
-float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth_flat, double Depth_deep);
-
+//float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth_flat, double Depth_deep);
+float adjustAmbient(double textDepth, float maxInt, double rateAmbvsDiff_flat, double rateAmbvsDiff_deep, double Depth_flat, double Depth_deep);
 void updateProbe(double probeHeight, double probeDepth, vector<Vec2>& probeVerts);
 void drawProbe(double dispDist, double probeDepth, const vector<Vec2>& probeVerts);
 

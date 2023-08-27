@@ -508,6 +508,15 @@ double getTg(double shapeHeight, double shapeDepth, double Y) {
 	return (-shapeDepth * sin(M_PI * Y / shapeHeight) * M_PI / shapeHeight);
 }
 
+float adjustAmbient(double textDepth, float maxInt, double rateAmbvsDiff_flat, double rateAmbvsDiff_deep, double Depth_flat, double Depth_deep) {
+
+	double rateAmbvsDiff_new = rateAmbvsDiff_flat + (rateAmbvsDiff_deep - rateAmbvsDiff_flat) * (textDepth - Depth_flat) / (Depth_deep - Depth_flat);
+	float newAmbient = maxInt * (rateAmbvsDiff_new / (rateAmbvsDiff_new + 1));
+
+	return newAmbient;
+}
+
+/*
 float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth_flat, double Depth_deep) {
 	float newDiff = ambInt;
 
@@ -518,6 +527,7 @@ float adjustDiffLight(double textDepth, float maxInt, float ambInt, double Depth
 
 	return newDiff;
 }
+*/
 
 double NewtonSolver_fz(double z, double Depth, double zCoeff, double distShapeToEye) {
 	double val = z / Depth - cos(zCoeff * (z - distShapeToEye));
@@ -1072,7 +1082,9 @@ void initStimulus(double stimulusDepth) {
 
 	if (testing_texture_vs_disparity) {
 		stimulus_built = buildTextureSurface(stimulus_width, stimulus_height, stimulusDepth, stimulusDepth, dist_toEye, stimulus_visiblewidth, my_verts, my_contour_data);
-		light_dif = adjustDiffLight(stimulusDepth, max_intensity, light_amb, light_depthMin, light_depthMax);
+		max_intensity = min_intensity + (1.0 - min_intensity) * (depth_test - light_depthMin) / (light_depthMax - light_depthMin);
+		light_amb = adjustAmbient(depth_test, max_intensity, 1.0, 0.4, light_depthMin, light_depthMax);
+		light_dif = max_intensity - light_amb;
 		
 	}
 	else {
@@ -1348,6 +1360,7 @@ void initVariables()
 
 void initBlock()
 {
+	setViewingVar();
 	// initialize the trial matrix
 	trial.init(parameters);
 	trial.next();
@@ -1480,22 +1493,9 @@ void drawInfo()
 
 		switch (current_stage) {
 		case stimulus_preview:
-			glColor3fv(glRed);
-			text.draw("Welcome! press + to start training");
-			text.draw("# Name: " + subjectName);
-			text.draw("# IOD: " + stringify<double>(interoculardistance));
-			//text.draw("# depth: " + stringify<double>(depth_test));
-			//text.draw("# left eye on: " + stringify<bool>(left_eye_on));
-			//text.draw("# rt eye on: " + stringify<bool>(right_eye_on));	
-			//text.draw("# testing_texture_vs_disparity : " + stringify<bool>(testing_texture_vs_disparity));
-
-			// check if mirror is calibrated				
-			text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment)); 
-			text.draw("Mirror1 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror1].p.transpose()));
-			text.draw("Mirror2 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror2].p.transpose()));
-		
-
-			if (left_eye_on)
+			glColor3fv(glWhite);
+			text.draw("Welcome! press + to start training...                    Alias: " + subjectName + "                    IOD: " + stringify<double>(interoculardistance));
+						if (left_eye_on)
 				text.draw("# L: OOOOO");
 			else
 				text.draw("# L: XXXXX");
@@ -1506,9 +1506,13 @@ void drawInfo()
 			else
 				text.draw("# R: XXXXX");
 
-
-
-
+			glColor3fv(glRed);
+			// check if mirror is calibrated	
+			text.draw("# !!!!Mirror Alignment = " + stringify<double>(mirrorAlignment)); 
+			if (mirrorAlignment > 180)
+				text.draw("Mirror1 " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror1].p.transpose())+ "   Mirror 2 "+ stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror2].p.transpose()));
+			//text.draw("Mirror2 Marker " + stringify< Eigen::Matrix<double, 1, 3> >(markers[mirror2].p.transpose()));
+	
 			break;
 
 		case trial_fixate:
@@ -1517,11 +1521,10 @@ void drawInfo()
 
 			glColor3fv(glRed);
 			
-			text.draw("# Name: " + subjectName);
-			text.draw("# IOD: " + stringify<double>(interoculardistance));
-			text.draw("# depth: " + stringify<double>(depth_test));
+			//text.draw("# Name: " + subjectName);
+			//text.draw("# IOD: " + stringify<double>(interoculardistance));
+			//text.draw("# depth: " + stringify<double>(depth_test));
 			text.draw("# trial: " + stringify<int>(trialNum));
-			text.draw("# time: " + stringify<double>(ElapsedTime));
 			text.draw("# current stage: " + stringify<int>(current_stage));
 
 			// check if mirror is calibrated
@@ -1718,6 +1721,7 @@ void writeResponse() {
 			subjectName << "\t" <<
 			(1-targetCueID) << "\t" <<
 			interoculardistance << "\t" <<
+			sessionNum << "\t" <<
 			blkNum << "\t" <<
 			trialNum << "\t" <<
 			display_distance_jittered << "\t" <<
@@ -1743,6 +1747,7 @@ void writeResponse() {
 			subjectName << "\t" <<
 			(1 - targetCueID) << "\t" <<
 			interoculardistance << "\t" <<
+			sessionNum << "\t" <<
 			blkNum << "\t" <<
 			trialNum << "\t" <<
 			display_distance_jittered << "\t" <<
