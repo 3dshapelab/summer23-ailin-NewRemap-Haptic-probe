@@ -118,7 +118,7 @@ int repetition = 2;
 int totalTrNum = totalBlkNum * repetition * 4; // two blocks * repetition * stimuli num
 int trialNum = 0;
 double percentComplete = 0;
-int trainNum_cap = 4;
+int trainNum_cap = 2;
 
 int adjustUpNum = 0, adjustDownNum = 0;
 
@@ -226,7 +226,7 @@ double R_intersect_factor = 2 / (1 + drop_off_rate);
 
 /********** LIGHT SHADING ***************/
 float max_intensity = 1.0;
-float min_intensity = 0.75;
+float min_intensity = 0.7;
 float light_amb = 0.3;
 float light_dif = 0.5;
 float lightDir_z = 0.5;

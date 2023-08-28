@@ -1121,7 +1121,7 @@ void drawFixation(double dispDist) {
 
 // This function seems to be used to shut down the system after use
 void shutdown() {
-	cout << "shutting down" << endl;
+	
 	responseFile.close(); // close this object
 	if (resetScreen_betweenRuns) {
 		homeEverything(5000, 4500);
@@ -1322,7 +1322,7 @@ void setViewingVar() {
 		eyeRight = Vector3d(visualTarget_X + interoculardistance / 2, 0, 0);
 		eyeLeft = Vector3d(visualTarget_X - interoculardistance / 2, 0, 0);
 		eyeMiddle = Vector3d(visualTarget_X, 0, 0);
-
+		
 		if (monocular_display) {
 			right_eye_on = !left_eye_on;
 		}
@@ -1330,6 +1330,7 @@ void setViewingVar() {
 			left_eye_on = true;
 			right_eye_on = true;
 		}
+
 	}
 	else { //testing disparity
 
@@ -1364,6 +1365,9 @@ void initBlock()
 	// initialize the trial matrix
 	trial.init(parameters);
 	trial.next();
+
+	if (sessionNum == 1)
+		trainNum_cap = trainNum_cap + 2;
 
 	//trialNum = 1;
 }
@@ -1495,7 +1499,8 @@ void drawInfo()
 		case stimulus_preview:
 			glColor3fv(glWhite);
 			text.draw("Welcome! press + to start training...                    Alias: " + subjectName + "                    IOD: " + stringify<double>(interoculardistance));
-						if (left_eye_on)
+
+			if (left_eye_on)
 				text.draw("# L: OOOOO");
 			else
 				text.draw("# L: XXXXX");
@@ -1649,6 +1654,7 @@ void initTrial()
 	}
 	else {
 		depth_test = trial.getCurrent()["testDepths"];
+		//cout << "trN: " << trialNum << "     depth: " << depth_test << endl;
 	}
 
 
@@ -1813,11 +1819,16 @@ void advanceTrial()
 		}
 		else {
 			if (blkNum % 2 == 1) {
-				beepOk(6);
 				blkNum++;
 				left_eye_on = !left_eye_on;
+				
 				initBlock();
-				//trialNum = 0;
+				if (!left_eye_on)
+					beepOk(19);
+
+				if (!right_eye_on)
+					beepOk(20);
+
 				current_stage = break_time;
 				visibleInfo = true;
 				//initTrial();
@@ -2060,6 +2071,17 @@ void beepOk(int tone)
 			NULL, SND_FILENAME | SND_ASYNC);
 		break;
 
+	case 19: // cover left
+		PlaySound((LPCSTR)"C:\\cncsvision\\data\\beep\\spoken-CoverLefteye.wav",
+			NULL, SND_FILENAME | SND_ASYNC);
+		break;
+
+	case 20: // cover right
+		PlaySound((LPCSTR)"C:\\cncsvision\\data\\beep\\spoken-CoverRighteye.wav",
+			NULL, SND_FILENAME | SND_ASYNC);
+		break;
+
+
 	case 24: // help
 		PlaySound((LPCSTR)"C:\\cncsvision\\data\\beep\\spoken-help.wav",
 			NULL, SND_FILENAME | SND_ASYNC);
@@ -2149,8 +2171,13 @@ int main(int argc, char* argv[])
 	initMotors();
 
 	initStimulus(depth_test);
-
 	initProjectionScreen(display_distance);
+
+	if (!left_eye_on)
+		beepOk(19);
+	
+	if (!right_eye_on)
+		beepOk(20);
 
 	// glut callback, OpenGL functions that are infinite loops to constantly run 
 
